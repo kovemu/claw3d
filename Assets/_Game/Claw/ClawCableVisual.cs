@@ -7,14 +7,20 @@ namespace Claw3D.Claw
         [SerializeField] private Transform trolley;
         [SerializeField] private Transform hub;
         [SerializeField] private Transform cableMesh;
-        [SerializeField] private float radius = 0.004f;
+        [SerializeField] private float radius = 0.006f;
 
-        public void Configure(Transform trolleyTransform, Transform hubTransform, Transform mesh, float cableRadius = 0.004f)
+        public void Configure(Transform trolleyTransform, Transform hubTransform, Transform mesh, float cableRadius = 0.006f)
         {
             trolley = trolleyTransform;
             hub = hubTransform;
             cableMesh = mesh;
             radius = cableRadius;
+            Refresh();
+        }
+
+        public void SetRadius(float cableRadius)
+        {
+            radius = Mathf.Max(0.001f, cableRadius);
             Refresh();
         }
 
