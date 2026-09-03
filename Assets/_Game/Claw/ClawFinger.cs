@@ -4,45 +4,52 @@ using UnityEngine;
 namespace Claw3D.Claw
 {
     [RequireComponent(typeof(HingeJoint))]
+    [RequireComponent(typeof(Rigidbody))]
     public sealed class ClawFinger : MonoBehaviour
     {
         [SerializeField] private ClawPhysicsConfig config;
-        [SerializeField] private bool invertAngle;
-        private HingeJoint hinge;
+        [SerializeField] private HingeJoint hinge;
+        [Range(0f, 1f), SerializeField] private float openAmount = 1f;
+        [Range(0.05f, 1f), SerializeField] private float strengthScale = 1f;
 
         private void Awake()
         {
-            hinge = GetComponent<HingeJoint>();
+            if (hinge == null) hinge = GetComponent<HingeJoint>();
         }
 
-        public void Configure(ClawPhysicsConfig physicsConfig, bool inverted)
+        public void Configure(ClawPhysicsConfig physicsConfig)
         {
             config = physicsConfig;
-            invertAngle = inverted;
             hinge = GetComponent<HingeJoint>();
-            ApplyJointSettings();
+            Rigidbody body = GetComponent<Rigidbody>();
+            body.mass = config.fingerMass;
+            body.angularDamping = config.fingerAngularDamping;
+            ApplyMotor();
         }
 
-        public void SetClosed(bool closed)
+        public void SetOpenAmount(float amount)
+        {
+            openAmount = Mathf.Clamp01(amount);
+            ApplyMotor();
+        }
+
+        public void SetStrengthScale(float scale)
+        {
+            strengthScale = Mathf.Clamp(scale, 0.05f, 1f);
+            ApplyMotor();
+        }
+
+        private void ApplyMotor()
         {
             if (hinge == null || config == null) return;
-            float target = closed ? config.closedAngle : config.openAngle;
-            if (invertAngle) target = -target;
 
+            float target = Mathf.Lerp(config.closedAngleDegrees, config.openAngleDegrees, openAmount);
             JointSpring spring = hinge.spring;
-            spring.spring = config.fingerSpring;
+            spring.spring = config.fingerSpring * strengthScale;
             spring.damper = config.fingerDamper;
             spring.targetPosition = target;
             hinge.spring = spring;
             hinge.useSpring = true;
-        }
-
-        private void ApplyJointSettings()
-        {
-            if (hinge == null || config == null) return;
-            hinge.useSpring = true;
-            hinge.useLimits = false;
-            SetClosed(false);
         }
     }
 }
