@@ -16,7 +16,8 @@ namespace Claw3D.Physics
         public Vector2 xLimits = new(-0.26f, 0.26f);
         public Vector2 zLimits = new(-0.26f, 0.26f);
         public float topY = 1.00f;
-        public float bottomY = 0.42f;
+        [Tooltip("Lowest trolley height during Drop. Tuned so the open fingers enter the plush pile instead of stopping above it.")]
+        public float bottomY = 0.36f;
         public float railY = 0.96f;
         public float dropSpeed = 0.55f;
         public float liftSpeed = 0.50f;
