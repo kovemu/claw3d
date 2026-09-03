@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using Claw3D.Claw;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -57,6 +58,13 @@ namespace Claw3D.Editor
                     BuildFingerVisual(finger, chrome, darkMetal, rubber);
             }
 
+            GameObject cable = GameObject.Find("Cable");
+            if (cable != null)
+            {
+                ClawCableVisual cableVisual = cable.GetComponent<ClawCableVisual>();
+                if (cableVisual != null) cableVisual.SetRadius(0.006f);
+            }
+
             SceneView.RepaintAll();
         }
 
@@ -71,7 +79,7 @@ namespace Claw3D.Editor
             GameObject root = new(TrolleyVisualRoot);
             root.transform.SetParent(trolley.transform, false);
 
-            VisualCube("CarriageBody", root.transform, new Vector3(0f, 0f, 0f), new Vector3(0.11f, 0.045f, 0.085f), darkMetal);
+            VisualCube("CarriageBody", root.transform, Vector3.zero, new Vector3(0.11f, 0.045f, 0.085f), darkMetal);
             VisualCube("CarriageTop", root.transform, new Vector3(0f, 0.026f, 0f), new Vector3(0.085f, 0.018f, 0.070f), chrome);
             VisualCube("CarriageAccent", root.transform, new Vector3(0f, -0.008f, 0.046f), new Vector3(0.068f, 0.020f, 0.010f), accent);
 
@@ -90,8 +98,6 @@ namespace Claw3D.Editor
             GameObject root = new(HubVisualRoot);
             root.transform.SetParent(hub.transform, false);
 
-            // Flattened dome + lower ring reads much closer to a real arcade claw head
-            // while the original sphere collider remains untouched underneath.
             VisualSphere("Dome", root.transform, new Vector3(0f, 0.006f, 0f), new Vector3(0.105f, 0.072f, 0.105f), chrome);
             VisualCylinder("LowerRing", root.transform, new Vector3(0f, -0.031f, 0f), new Vector3(0.054f, 0.010f, 0.054f), darkMetal, Quaternion.identity);
             VisualCylinder("CableCollar", root.transform, new Vector3(0f, 0.050f, 0f), new Vector3(0.024f, 0.022f, 0.024f), darkMetal, Quaternion.identity);
@@ -106,8 +112,6 @@ namespace Claw3D.Editor
             GameObject root = new(FingerVisualRoot);
             root.transform.SetParent(finger.transform, false);
 
-            // Keep the physics capsules, but hide their gray-box renderers.
-            // Presentation capsules copy those exact transforms so visuals stay glued to physics.
             for (int segmentIndex = 1; segmentIndex <= 3; segmentIndex++)
             {
                 Transform source = finger.transform.Find($"Segment_{segmentIndex}");
@@ -139,7 +143,6 @@ namespace Claw3D.Editor
                 }
             }
 
-            // Horizontal hinge pin at the root hides the obvious procedural joint seam.
             VisualCylinder(
                 "HingePin",
                 root.transform,
