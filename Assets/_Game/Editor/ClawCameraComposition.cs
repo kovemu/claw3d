@@ -49,13 +49,14 @@ namespace Claw3D.Editor
             Camera camera = cameraObject.GetComponent<Camera>();
             if (camera == null) return;
 
-            // The reference game's coordinate convention treats +Z as the cabinet front.
-            // Keep the camera centered on X so the player sees the machine straight-on,
-            // with only a small downward pitch to expose the prize bed.
-            cameraObject.transform.position = new Vector3(0f, 0.74f, 2.20f);
-            cameraObject.transform.LookAt(new Vector3(0f, 0.47f, 0.03f), Vector3.up);
+            // +Z is the cabinet front. Keep X exactly centered: no three-quarter view.
+            // Distance/FOV are chosen so the full 0.9m cabinet still fits a 9:16 portrait crop.
+            cameraObject.transform.position = new Vector3(0f, 0.67f, 2.35f);
+            cameraObject.transform.LookAt(new Vector3(0f, 0.44f, 0.03f), Vector3.up);
             camera.fieldOfView = 42f;
             camera.nearClipPlane = 0.03f;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.055f, 0.045f, 0.075f);
 
             EditorUtility.SetDirty(cameraObject.transform);
             EditorUtility.SetDirty(camera);
