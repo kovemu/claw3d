@@ -1,0 +1,63 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72ca523839b4905409cd0cfc65b8edb3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Claw3D.Physics.ClawPhysicsConfig
+  cabinetHalfX: 0.42
+  cabinetHalfZ: 0.42
+  cabinetHeight: 1.05
+  shellThickness: 0.04
+  trolleySpeed: 0.5
+  xLimits: {x: -0.26, y: 0.26}
+  zLimits: {x: -0.26, y: 0.26}
+  topY: 1
+  bottomY: 0.2
+  railY: 0.96
+  dropSpeed: 0.55
+  liftSpeed: 0.5
+  returnSpeed: 0.6
+  homeXZ: {x: -0.3, y: 0.3}
+  cableLength: 0.24
+  hubRadius: 0.05
+  hubMass: 0.2
+  hubLinearDamping: 0.8
+  hubAngularDamping: 1.75
+  fingerCount: 3
+  fingerMountRadius: 0.032
+  fingerMountY: -0.03
+  fingerSegmentLengths: {x: 0.06, y: 0.055, z: 0.045}
+  fingerSegmentCurvesRadians: {x: 0.12, y: 0.5, z: 0.95}
+  fingerSegmentRadii: {x: 0.01, y: 0.0075, z: 0.0055}
+  fingerMass: 0.035
+  fingerAngularDamping: 4
+  openAngleDegrees: -48.7
+  closedAngleDegrees: 0
+  fingerSpring: 9
+  fingerDamper: 0.45
+  carryStrengthFactor: 0.75
+  gripSeconds: 0.55
+  releaseSeconds: 0.45
+  scoreSeconds: 0.9
+  joltAmplitude: 0.012
+  joltFrequency: 18
+  joltDecay: 0.12
+  joltDuration: 0.35
+  toyMinRadius: 0.055
+  toyMaxRadius: 0.072
+  toyMass: 0.055
+  toyFriction: 2
+  fingerFriction: 2
+  toyLinearDamping: 0.9
+  toyAngularDamping: 1.6
+  solverIterations: 12
+  solverVelocityIterations: 8
+  fixedTimestep: 0.016666668
