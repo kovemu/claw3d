@@ -31,9 +31,12 @@ namespace Claw3D.Claw
         {
             if (config == null || trolleyBody == null) return;
 
+            // Camera is fixed at +Z looking toward the cabinet center.
+            // Map input to screen-space movement: left/right and up/down should
+            // follow what the player sees, not raw world-axis directions.
             Vector3 p = trolleyBody.position;
-            p.x = Mathf.Clamp(p.x + input.x * config.trolleySpeed * Time.fixedDeltaTime, config.xLimits.x, config.xLimits.y);
-            p.z = Mathf.Clamp(p.z + input.y * config.trolleySpeed * Time.fixedDeltaTime, config.zLimits.x, config.zLimits.y);
+            p.x = Mathf.Clamp(p.x - input.x * config.trolleySpeed * Time.fixedDeltaTime, config.xLimits.x, config.xLimits.y);
+            p.z = Mathf.Clamp(p.z - input.y * config.trolleySpeed * Time.fixedDeltaTime, config.zLimits.x, config.zLimits.y);
             trolleyBody.MovePosition(p);
         }
 
