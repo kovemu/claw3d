@@ -49,12 +49,13 @@ namespace Claw3D.Editor
             Camera camera = cameraObject.GetComponent<Camera>();
             if (camera == null) return;
 
-            // +Z is the cabinet front. Keep X exactly centered: no three-quarter view.
-            // Distance/FOV are chosen so the full 0.9m cabinet still fits a 9:16 portrait crop.
-            cameraObject.transform.position = new Vector3(0f, 0.67f, 2.35f);
-            cameraObject.transform.LookAt(new Vector3(0f, 0.44f, 0.03f), Vector3.up);
-            camera.fieldOfView = 42f;
-            camera.nearClipPlane = 0.03f;
+            // Human-eye arcade view: stand close to the cabinet, centered on the glass,
+            // with the player's eye slightly above the prize bed and only a mild downward pitch.
+            // +Z is the cabinet front, so the camera remains on +Z and never becomes a three-quarter shot.
+            cameraObject.transform.position = new Vector3(0f, 0.92f, 1.60f);
+            cameraObject.transform.LookAt(new Vector3(0f, 0.43f, 0.02f), Vector3.up);
+            camera.fieldOfView = 50f;
+            camera.nearClipPlane = 0.02f;
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.055f, 0.045f, 0.075f);
 
