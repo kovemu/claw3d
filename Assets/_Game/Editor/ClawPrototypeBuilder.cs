@@ -29,31 +29,31 @@ namespace Claw3D.Editor
             CreateFloor();
             CreateFrame();
 
-            GameObject trolley = Cube("Trolley", new Vector3(0f, 5.3f, 0f), new Vector3(0.7f, 0.25f, 0.7f));
+            GameObject trolley = Cube("Trolley", config.homePosition, new Vector3(0.8f, 0.25f, 0.8f));
             Rigidbody trolleyBody = trolley.AddComponent<Rigidbody>();
             trolleyBody.isKinematic = true;
             trolleyBody.interpolation = RigidbodyInterpolation.Interpolate;
 
-            GameObject hub = Sphere("ClawHub", new Vector3(0f, 3.6f, 0f), 0.28f);
+            GameObject hub = Sphere("ClawHub", config.homePosition + Vector3.down * config.topCableLength, 0.42f);
             Rigidbody hubBody = hub.AddComponent<Rigidbody>();
             hubBody.mass = config.clawMass;
             hubBody.linearDamping = config.swingDrag;
             hubBody.angularDamping = config.angularDrag;
             hubBody.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
-            ConfigurableJoint cable = hub.AddComponent<ConfigurableJoint>();
-            cable.connectedBody = trolleyBody;
-            cable.autoConfigureConnectedAnchor = false;
-            cable.anchor = Vector3.zero;
-            cable.connectedAnchor = Vector3.zero;
-            cable.xMotion = ConfigurableJointMotion.Locked;
-            cable.yMotion = ConfigurableJointMotion.Locked;
-            cable.zMotion = ConfigurableJointMotion.Locked;
-            cable.angularXMotion = ConfigurableJointMotion.Free;
-            cable.angularYMotion = ConfigurableJointMotion.Free;
-            cable.angularZMotion = ConfigurableJointMotion.Free;
+            ConfigurableJoint cableJoint = hub.AddComponent<ConfigurableJoint>();
+            cableJoint.connectedBody = trolleyBody;
+            cableJoint.autoConfigureConnectedAnchor = false;
+            cableJoint.anchor = Vector3.zero;
+            cableJoint.connectedAnchor = new Vector3(0f, -config.topCableLength, 0f);
+            cableJoint.xMotion = ConfigurableJointMotion.Locked;
+            cableJoint.yMotion = ConfigurableJointMotion.Locked;
+            cableJoint.zMotion = ConfigurableJointMotion.Locked;
+            cableJoint.angularXMotion = ConfigurableJointMotion.Free;
+            cableJoint.angularYMotion = ConfigurableJointMotion.Free;
+            cableJoint.angularZMotion = ConfigurableJointMotion.Free;
 
-            GameObject cableVisual = Cylinder("CableVisual", new Vector3(0f, 4.45f, 0f), new Vector3(0.035f, 0.85f, 0.035f));
+            GameObject cableVisual = Cylinder("CableVisual", config.homePosition + Vector3.down * (config.topCableLength * 0.5f), new Vector3(0.035f, config.topCableLength * 0.5f, 0.035f));
             cableVisual.transform.SetParent(trolley.transform, true);
             Object.DestroyImmediate(cableVisual.GetComponent<Collider>());
 
@@ -62,48 +62,66 @@ namespace Claw3D.Editor
             {
                 float angle = i * 120f;
                 Vector3 radial = Quaternion.Euler(0f, angle, 0f) * Vector3.forward;
-                GameObject finger = Cube($"Finger_{i + 1}", hub.transform.position + radial * 0.38f + Vector3.down * 0.32f, new Vector3(0.16f, 0.75f, 0.16f));
-                finger.transform.rotation = Quaternion.LookRotation(radial, Vector3.up) * Quaternion.Euler(20f, 0f, 0f);
+                Vector3 fingerPos = hub.transform.position + radial * 0.42f + Vector3.down * 0.42f;
+                GameObject finger = Cube($"Finger_{i + 1}", fingerPos, new Vector3(0.12f, 0.8f, 0.12f));
+                finger.transform.rotation = Quaternion.LookRotation(radial, Vector3.up) * Quaternion.Euler(24f, 0f, 0f);
+
                 Rigidbody fingerBody = finger.AddComponent<Rigidbody>();
                 fingerBody.mass = config.fingerMass;
                 fingerBody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+                fingerBody.interpolation = RigidbodyInterpolation.Interpolate;
+
                 HingeJoint hinge = finger.AddComponent<HingeJoint>();
                 hinge.connectedBody = hubBody;
                 hinge.axis = Vector3.right;
                 hinge.autoConfigureConnectedAnchor = true;
+
                 ClawFinger controller = finger.AddComponent<ClawFinger>();
                 controller.Configure(config, false);
                 fingers.Add(controller);
             }
 
             ClawController claw = trolley.AddComponent<ClawController>();
-            claw.Configure(config, trolleyBody, fingers.ToArray());
+            claw.Configure(config, trolleyBody, cableJoint, cableVisual.transform, fingers.ToArray());
+
             ClawInput input = trolley.AddComponent<ClawInput>();
             MachineController machine = trolley.AddComponent<MachineController>();
-            machine.Configure(input, claw);
+            machine.Configure(input, claw, config);
 
             CreateToys();
+            CreatePrizeChute();
+
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.SaveAssets();
             Selection.activeGameObject = trolley;
-            Debug.Log("Claw3D Day 1 prototype created. Open Assets/_Game/Scenes/ClawPrototype.unity and press Play. WASD/arrows move; Space toggles grip.");
+            Debug.Log("Claw3D prototype rebuilt. WASD/arrows aim. Space starts a full drop -> grip -> lift -> return -> release cycle.");
         }
 
         private static void CreateToys()
         {
             Vector3[] positions =
             {
-                new(-1.1f, 0.65f, 0.4f), new(-0.35f, 0.65f, 0.15f), new(0.45f, 0.65f, 0.45f),
-                new(1.15f, 0.65f, 0.1f), new(-0.75f, 0.65f, -0.65f), new(0.15f, 0.65f, -0.55f), new(0.95f, 0.65f, -0.75f)
+                new(-0.9f, 0.65f, 0.35f), new(-0.25f, 0.68f, 0.05f), new(0.45f, 0.66f, 0.4f),
+                new(1.05f, 0.65f, 0.05f), new(-0.65f, 0.68f, -0.55f), new(0.05f, 0.65f, -0.55f), new(0.8f, 0.67f, -0.65f)
             };
 
             for (int i = 0; i < positions.Length; i++)
             {
-                GameObject toy = Sphere($"Toy_{i + 1}", positions[i], 0.42f + (i % 3) * 0.05f);
+                GameObject toy = Sphere($"Toy_{i + 1}", positions[i], 0.75f + (i % 3) * 0.08f);
                 Rigidbody rb = toy.AddComponent<Rigidbody>();
                 rb.mass = 0.55f + (i % 3) * 0.2f;
+                rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+                rb.interpolation = RigidbodyInterpolation.Interpolate;
                 toy.AddComponent<ToyPhysics>();
             }
+        }
+
+        private static void CreatePrizeChute()
+        {
+            Cube("PrizeChuteBase", new Vector3(-2.35f, 0.45f, -1.55f), new Vector3(1.25f, 0.25f, 1.25f));
+            Cube("PrizeChuteBack", new Vector3(-2.35f, 0.9f, -2.1f), new Vector3(1.25f, 0.9f, 0.12f));
+            Cube("PrizeChuteLeft", new Vector3(-2.9f, 0.9f, -1.55f), new Vector3(0.12f, 0.9f, 1.25f));
+            Cube("PrizeChuteRight", new Vector3(-1.8f, 0.9f, -1.55f), new Vector3(0.12f, 0.9f, 1.25f));
         }
 
         private static void CreateFloor()
@@ -116,6 +134,8 @@ namespace Claw3D.Editor
         {
             Vector3[] posts = { new(-3.8f, 2.7f, -2.8f), new(3.8f, 2.7f, -2.8f), new(-3.8f, 2.7f, 2.8f), new(3.8f, 2.7f, 2.8f) };
             foreach (Vector3 p in posts) Cube("FramePost", p, new Vector3(0.16f, 5.4f, 0.16f));
+            Cube("TopBeamFront", new Vector3(0f, 5.35f, -2.8f), new Vector3(7.7f, 0.18f, 0.18f));
+            Cube("TopBeamBack", new Vector3(0f, 5.35f, 2.8f), new Vector3(7.7f, 0.18f, 0.18f));
         }
 
         private static void CreateCamera()
@@ -123,9 +143,9 @@ namespace Claw3D.Editor
             GameObject go = new("Main Camera");
             Camera camera = go.AddComponent<Camera>();
             go.tag = "MainCamera";
-            go.transform.position = new Vector3(7.5f, 6.2f, -8.5f);
+            go.transform.position = new Vector3(7.3f, 6.0f, -8.3f);
             go.transform.LookAt(new Vector3(0f, 2.2f, 0f));
-            camera.fieldOfView = 48f;
+            camera.fieldOfView = 46f;
         }
 
         private static void CreateLight()
