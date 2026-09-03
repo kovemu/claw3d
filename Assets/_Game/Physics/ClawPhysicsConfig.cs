@@ -41,8 +41,8 @@ namespace Claw3D.Physics
         public float fingerAngularDamping = 4.0f;
 
         [Header("Finger Motor")]
-        [Tooltip("RiwRiwara reference uses 0.85 rad (~48.7 degrees).")]
-        public float openAngleDegrees = 48.7f;
+        [Tooltip("Open must rotate outward from the inward-curved rest shape. With this hinge axis that is the negative direction.")]
+        public float openAngleDegrees = -48.7f;
         public float closedAngleDegrees = 0f;
         [Tooltip("PhysX spring units differ from Rapier; this is a Unity starting point.")]
         public float fingerSpring = 9.0f;
