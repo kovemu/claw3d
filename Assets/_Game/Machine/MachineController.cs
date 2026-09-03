@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using Claw3D.Claw;
 using Claw3D.Input;
 using Claw3D.Physics;
+using Claw3D.Toys;
 using UnityEngine;
 
 namespace Claw3D.Machine
@@ -12,8 +14,11 @@ namespace Claw3D.Machine
         [SerializeField] private ClawPhysicsConfig config;
         [SerializeField] private MachineState state = MachineState.Idle;
 
+        private readonly HashSet<int> scoredToyIds = new();
         private float stateTimer;
         private float fingerOpen = 1f;
+        private int prizes;
+        private int prizesAtRoundStart;
         private string prompt = "Space: start";
 
         public void Configure(ClawInput clawInput, ClawController clawController, ClawPhysicsConfig physicsConfig)
@@ -24,6 +29,15 @@ namespace Claw3D.Machine
             EnterState(MachineState.Idle);
         }
 
+        public void ReportPrize(ToyPhysics toy)
+        {
+            if (toy == null) return;
+            int id = toy.GetInstanceID();
+            if (!scoredToyIds.Add(id)) return;
+            prizes++;
+            prompt = "PRIZE!";
+        }
+
         private void Update()
         {
             if (input == null || claw == null || config == null) return;
@@ -31,8 +45,15 @@ namespace Claw3D.Machine
 
             if (input.DropPressed)
             {
-                if (state == MachineState.Idle) EnterState(MachineState.Aim);
-                else if (state == MachineState.Aim) EnterState(MachineState.Drop);
+                if (state == MachineState.Idle)
+                {
+                    prizesAtRoundStart = prizes;
+                    EnterState(MachineState.Aim);
+                }
+                else if (state == MachineState.Aim)
+                {
+                    EnterState(MachineState.Drop);
+                }
             }
 
             switch (state)
@@ -134,14 +155,14 @@ namespace Claw3D.Machine
                     break;
                 case MachineState.Score:
                     claw.SetOpenAmount(1f);
-                    prompt = "Round complete";
+                    prompt = prizes > prizesAtRoundStart ? "PRIZE! Nice grab." : "Miss. Try again.";
                     break;
             }
         }
 
         private void OnGUI()
         {
-            GUI.Box(new Rect(12f, 12f, 350f, 58f), $"CLAW3D  |  {state}\n{prompt}");
+            GUI.Box(new Rect(12f, 12f, 370f, 78f), $"CLAW3D  |  {state}\n{prompt}\nPrizes: {prizes}");
         }
     }
 }
