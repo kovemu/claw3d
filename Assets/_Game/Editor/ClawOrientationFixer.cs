@@ -44,9 +44,10 @@ namespace Claw3D.Editor
             ClawPhysicsConfig config = AssetDatabase.LoadAssetAtPath<ClawPhysicsConfig>(ConfigPath);
             if (config == null) return;
 
-            // Existing assets may still contain the old positive open angle.
+            // Existing assets may still contain the old orientation and shallow drop depth.
             config.openAngleDegrees = -48.7f;
             config.closedAngleDegrees = 0f;
+            config.bottomY = 0.36f;
             EditorUtility.SetDirty(config);
 
             for (int i = 1; i <= config.fingerCount; i++)
