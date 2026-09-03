@@ -14,7 +14,7 @@ namespace Claw3D.Machine
         [SerializeField] private ClawPhysicsConfig config;
         [SerializeField] private MachineState state = MachineState.Idle;
 
-        private readonly HashSet<ulong> scoredToyIds = new();
+        private readonly HashSet<ToyPhysics> scoredToys = new();
         private float stateTimer;
         private float fingerOpen = 1f;
         private int prizes;
@@ -32,8 +32,7 @@ namespace Claw3D.Machine
         public void ReportPrize(ToyPhysics toy)
         {
             if (toy == null) return;
-            ulong id = toy.GetEntityId();
-            if (!scoredToyIds.Add(id)) return;
+            if (!scoredToys.Add(toy)) return;
             prizes++;
             prompt = "PRIZE!";
         }
