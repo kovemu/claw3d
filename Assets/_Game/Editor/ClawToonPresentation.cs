@@ -44,11 +44,8 @@ namespace Claw3D.Editor
                 return;
             }
 
-            // Rebuild presentation-only meshes first. This restores their intended source
-            // colours even if a previous experimental toon pass replaced the materials.
             ClawCabinetPresentation.ApplyToActivePrototypeScene();
             ClawMechanismPresentation.ApplyToActivePrototypeScene();
-
             EnsureFolders();
 
             foreach (GameObject root in scene.GetRootGameObjects())
@@ -119,18 +116,16 @@ namespace Claw3D.Editor
 
             string n = renderer.gameObject.name;
 
-            // Physics-bed materials were temporary scene materials in the original builder,
-            // so a previous toon pass can erase their colour reference. Give them an explicit
-            // stable arcade palette instead of falling back to white.
-            if (n.StartsWith("Floor", StringComparison.Ordinal)) return new Color(0.33f, 0.37f, 0.49f, 1f);
-            if (n.StartsWith("Chute", StringComparison.Ordinal)) return new Color(0.19f, 0.21f, 0.29f, 1f);
+            // Keep the prize bed quiet and neutral. It is a visual stage for the toys,
+            // not another saturated object in the composition.
+            if (n.StartsWith("Floor", StringComparison.Ordinal)) return new Color(0.73f, 0.72f, 0.75f, 1f);
+            if (n.StartsWith("Chute", StringComparison.Ordinal)) return new Color(0.48f, 0.46f, 0.52f, 1f);
             if (n == "RailX") return new Color(0.46f, 0.50f, 0.58f, 1f);
             if (n == "Cable") return new Color(0.08f, 0.085f, 0.11f, 1f);
 
             if (sourceMaterial != null && sourceMaterial.shader != toonShader)
                 return ReadMaterialColor(sourceMaterial);
 
-            // Already-toon objects keep the colour stored in their generated material.
             if (sourceMaterial != null && sourceMaterial.HasProperty("_BaseColor"))
                 return sourceMaterial.GetColor("_BaseColor");
 
@@ -155,6 +150,7 @@ namespace Claw3D.Editor
         private static string GetWidthClass(Renderer renderer)
         {
             string n = renderer.gameObject.name;
+            if (n.StartsWith("Floor", StringComparison.Ordinal) || n.StartsWith("Chute", StringComparison.Ordinal)) return "floor";
             if (n.StartsWith("Blade_", StringComparison.Ordinal) || n == "Cable") return "thin";
             if (TryGetToyIndex(renderer.transform, out _)) return "toy";
             return "standard";
@@ -163,6 +159,7 @@ namespace Claw3D.Editor
         private static float GetOutlineWidth(Renderer renderer)
         {
             string n = renderer.gameObject.name;
+            if (n.StartsWith("Floor", StringComparison.Ordinal) || n.StartsWith("Chute", StringComparison.Ordinal)) return 0.00035f;
             if (n.StartsWith("Blade_", StringComparison.Ordinal) || n == "Cable") return 0.0009f;
             if (TryGetToyIndex(renderer.transform, out _)) return 0.0018f;
             return 0.00125f;
@@ -185,18 +182,23 @@ namespace Claw3D.Editor
                 material.shader = shader;
             }
 
+            bool isFloor = widthClass == "floor";
+            float shadowFactor = isFloor ? 0.84f : 0.56f;
+            float shadowBlueFactor = isFloor ? 0.87f : 0.60f;
+            float rimBlend = isFloor ? 0.10f : 0.30f;
+
             Color shadow = new(
-                Mathf.Clamp01(baseColor.r * 0.56f),
-                Mathf.Clamp01(baseColor.g * 0.56f),
-                Mathf.Clamp01(baseColor.b * 0.60f),
+                Mathf.Clamp01(baseColor.r * shadowFactor),
+                Mathf.Clamp01(baseColor.g * shadowFactor),
+                Mathf.Clamp01(baseColor.b * shadowBlueFactor),
                 1f);
-            Color rim = Color.Lerp(baseColor, Color.white, 0.30f);
+            Color rim = Color.Lerp(baseColor, Color.white, rimBlend);
 
             material.SetColor("_BaseColor", new Color(baseColor.r, baseColor.g, baseColor.b, 1f));
             material.SetColor("_ShadowColor", shadow);
             material.SetColor("_RimColor", rim);
             material.SetColor("_OutlineColor", new Color(0.035f, 0.030f, 0.050f, 1f));
-            material.SetFloat("_RimPower", 4.2f);
+            material.SetFloat("_RimPower", isFloor ? 6.5f : 4.2f);
             material.SetFloat("_OutlineWidth", outlineWidth);
             EditorUtility.SetDirty(material);
             return material;
