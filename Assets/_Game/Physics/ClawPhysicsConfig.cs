@@ -44,9 +44,9 @@ namespace Claw3D.Physics
         [Tooltip("RiwRiwara reference uses 0.85 rad (~48.7 degrees).")]
         public float openAngleDegrees = 48.7f;
         public float closedAngleDegrees = 0f;
-        [Tooltip("Unity HingeJoint spring units differ from Rapier. Start here and tune in play tests.")]
-        public float fingerSpring = 8.0f;
-        public float fingerDamper = 0.35f;
+        [Tooltip("PhysX spring units differ from Rapier; this is a Unity starting point.")]
+        public float fingerSpring = 9.0f;
+        public float fingerDamper = 0.45f;
         public float carryStrengthFactor = 0.75f;
 
         [Header("Cycle")]
@@ -62,9 +62,17 @@ namespace Claw3D.Physics
 
         [Header("Toy Physics")]
         public float toyMinRadius = 0.055f;
-        public float toyMaxRadius = 0.080f;
-        public float toyMass = 0.08f;
-        public float toyFriction = 1.4f;
-        public float fingerFriction = 1.2f;
+        public float toyMaxRadius = 0.072f;
+        public float toyMass = 0.055f;
+        public float toyFriction = 2.0f;
+        public float fingerFriction = 2.0f;
+        public float toyLinearDamping = 0.9f;
+        public float toyAngularDamping = 1.6f;
+
+        [Header("Solver")]
+        [Tooltip("Rapier reference uses 8 substeps. PhysX uses per-body solver iterations instead.")]
+        public int solverIterations = 12;
+        public int solverVelocityIterations = 8;
+        public float fixedTimestep = 1f / 60f;
     }
 }
