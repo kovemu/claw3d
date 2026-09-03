@@ -29,9 +29,12 @@ namespace Claw3D.Claw
             body.solverVelocityIterations = config.solverVelocityIterations;
             body.maxAngularVelocity = 20f;
 
+            float low = Mathf.Min(config.closedAngleDegrees, config.openAngleDegrees) - 8f;
+            float high = Mathf.Max(config.closedAngleDegrees, config.openAngleDegrees) + 8f;
+
             JointLimits limits = hinge.limits;
-            limits.min = config.closedAngleDegrees - 8f;
-            limits.max = config.openAngleDegrees + 8f;
+            limits.min = low;
+            limits.max = high;
             limits.bounciness = 0f;
             limits.contactDistance = 1f;
             hinge.limits = limits;
