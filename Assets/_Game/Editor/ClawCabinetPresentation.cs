@@ -44,6 +44,7 @@ namespace Claw3D.Editor
             Material shell = GetOrCreateMaterial("CabinetShell.mat", new Color(0.92f, 0.16f, 0.44f), 0.05f, 0.42f);
             Material trim = GetOrCreateMaterial("CabinetTrim.mat", new Color(1.00f, 0.50f, 0.68f), 0.10f, 0.60f);
             Material dark = GetOrCreateMaterial("CabinetDark.mat", new Color(0.07f, 0.06f, 0.10f), 0.00f, 0.25f);
+            Material black = GetOrCreateMaterial("CabinetBlack.mat", new Color(0.025f, 0.022f, 0.035f), 0.00f, 0.18f);
             Material metal = GetOrCreateMaterial("CabinetMetal.mat", new Color(0.58f, 0.62f, 0.70f), 0.65f, 0.72f);
             Material glow = GetOrCreateMaterial("CabinetGlow.mat", new Color(1.00f, 0.78f, 0.90f), 0.00f, 0.75f);
 
@@ -53,8 +54,6 @@ namespace Claw3D.Editor
             const float hzFront = 0.455f;
             const float topY = 1.11f;
 
-            // Four clean cabinet posts. Front posts are deliberately thicker because
-            // the game is composed from straight ahead, not a three-quarter view.
             VisualCube("FrontPost_L", root.transform, new Vector3(-hx, 0.55f, hzFront), new Vector3(0.055f, 1.10f, 0.055f), shell);
             VisualCube("FrontPost_R", root.transform, new Vector3(hx, 0.55f, hzFront), new Vector3(0.055f, 1.10f, 0.055f), shell);
             VisualCube("BackPost_L", root.transform, new Vector3(-hx, 0.55f, -0.455f), new Vector3(0.035f, 1.10f, 0.035f), trim);
@@ -64,17 +63,14 @@ namespace Claw3D.Editor
             VisualCube("BottomFrontBeam", root.transform, new Vector3(0f, 0.015f, hzFront), new Vector3(0.91f, 0.055f, 0.055f), shell);
             VisualCube("TopCap", root.transform, new Vector3(0f, topY, 0f), new Vector3(0.96f, 0.11f, 0.96f), shell);
 
-            // Marquee gives the cabinet a readable silhouette even before final art.
             VisualCube("Marquee", root.transform, new Vector3(0f, 1.055f, 0.485f), new Vector3(0.78f, 0.12f, 0.045f), dark);
             VisualCube("MarqueeInset", root.transform, new Vector3(0f, 1.055f, 0.512f), new Vector3(0.65f, 0.065f, 0.012f), glow);
 
-            // Lower body. Pure presentation geometry: physics floor/chute remain untouched.
             VisualCube("LowerCabinet", root.transform, new Vector3(0f, -0.19f, 0.16f), new Vector3(0.92f, 0.38f, 0.60f), shell);
             VisualCube("LowerFront", root.transform, new Vector3(0f, -0.19f, 0.485f), new Vector3(0.84f, 0.31f, 0.055f), trim);
             VisualCube("PrizeWindow", root.transform, new Vector3(-0.25f, -0.19f, 0.520f), new Vector3(0.26f, 0.15f, 0.018f), dark);
-            VisualCube("PrizeWindowInner", root.transform, new Vector3(-0.25f, -0.19f, 0.532f), new Vector3(0.205f, 0.102f, 0.010f), new ColorMaterial(dark, new Color(0.025f, 0.022f, 0.035f)));
+            VisualCube("PrizeWindowInner", root.transform, new Vector3(-0.25f, -0.19f, 0.532f), new Vector3(0.205f, 0.102f, 0.010f), black);
 
-            // Sloped control deck, centered and readable from the fixed front camera.
             GameObject deck = VisualCube("ControlDeck", root.transform, new Vector3(0f, 0.015f, 0.545f), new Vector3(0.72f, 0.10f, 0.20f), dark);
             deck.transform.rotation = Quaternion.Euler(-12f, 0f, 0f);
 
@@ -86,7 +82,6 @@ namespace Claw3D.Editor
             GameObject button = VisualCylinder("DropButton", root.transform, new Vector3(-0.17f, 0.090f, 0.575f), new Vector3(0.050f, 0.018f, 0.050f), glow);
             button.transform.rotation = Quaternion.Euler(-12f, 0f, 0f);
 
-            // Small chrome rail housing makes the top mechanism visually connected.
             VisualCube("RailHousing", root.transform, new Vector3(0f, 0.965f, 0f), new Vector3(0.68f, 0.035f, 0.07f), metal);
 
             EditorUtility.SetDirty(root);
@@ -159,14 +154,6 @@ namespace Claw3D.Editor
             if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
             EditorUtility.SetDirty(material);
             return material;
-        }
-
-        private static Material new ColorMaterial(Material source, Color color)
-        {
-            Material copy = new(source.shader);
-            copy.color = color;
-            if (copy.HasProperty("_BaseColor")) copy.SetColor("_BaseColor", color);
-            return copy;
         }
     }
 }
