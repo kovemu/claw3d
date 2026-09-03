@@ -3,12 +3,11 @@ Shader "Claw3D/Toon"
     Properties
     {
         _BaseColor ("Base Color", Color) = (1,1,1,1)
-        _ShadowColor ("Shadow Color", Color) = (0.32,0.28,0.38,1)
-        _RimColor ("Rim Color", Color) = (1,0.86,0.95,1)
-        _RimPower ("Rim Power", Range(1,8)) = 3.5
-        _Steps ("Light Steps", Range(2,5)) = 3
-        _OutlineColor ("Outline Color", Color) = (0.055,0.045,0.075,1)
-        _OutlineWidth ("Outline Width", Range(0,0.015)) = 0.0025
+        _ShadowColor ("Shadow Color", Color) = (0.45,0.45,0.45,1)
+        _RimColor ("Rim Color", Color) = (1,1,1,1)
+        _RimPower ("Rim Power", Range(1,8)) = 4
+        _OutlineColor ("Outline Color", Color) = (0.035,0.03,0.05,1)
+        _OutlineWidth ("Outline Width", Range(0,0.01)) = 0.0016
     }
 
     SubShader
@@ -38,7 +37,6 @@ Shader "Claw3D/Toon"
                 half4 _RimColor;
                 half4 _OutlineColor;
                 float _RimPower;
-                float _Steps;
                 float _OutlineWidth;
             CBUFFER_END
 
@@ -92,7 +90,6 @@ Shader "Claw3D/Toon"
                 half4 _RimColor;
                 half4 _OutlineColor;
                 float _RimPower;
-                float _Steps;
                 float _OutlineWidth;
             CBUFFER_END
 
@@ -127,18 +124,24 @@ Shader "Claw3D/Toon"
                 Light mainLight = GetMainLight(shadowCoord);
 
                 float ndotl = saturate(dot(normalWS, mainLight.direction));
-                float steps = max(2.0, _Steps);
-                float band = saturate(round(ndotl * (steps - 1.0)) / (steps - 1.0));
-                float attenuation = mainLight.distanceAttenuation * mainLight.shadowAttenuation;
-                float litAmount = saturate(band * attenuation);
+                float shadowAttenuation = mainLight.shadowAttenuation;
+                float lightValue = ndotl * shadowAttenuation;
 
-                half3 toon = lerp(_ShadowColor.rgb, _BaseColor.rgb, litAmount);
-                toon *= (0.22h + mainLight.color * 0.88h);
+                // Three deliberately broad bands. They preserve the object's hue instead
+                // of tinting everything toward the scene light or ambient purple.
+                float band = lightValue > 0.62 ? 1.0 : (lightValue > 0.22 ? 0.78 : 0.56);
+                half3 toon = lerp(_ShadowColor.rgb, _BaseColor.rgb, band);
+
+                // Keep a small amount of main-light colour, but never enough to wash out
+                // the arcade palette.
+                half3 lightTint = lerp(half3(1,1,1), mainLight.color, 0.10h);
+                toon *= lightTint;
 
                 float fresnel = 1.0 - saturate(dot(normalWS, viewDirWS));
-                half3 rim = _RimColor.rgb * pow(fresnel, _RimPower) * 0.32h;
+                half rimMask = pow(fresnel, _RimPower) * 0.13h;
+                toon += _RimColor.rgb * rimMask;
 
-                return half4(toon + rim, _BaseColor.a);
+                return half4(saturate(toon), _BaseColor.a);
             }
             ENDHLSL
         }
