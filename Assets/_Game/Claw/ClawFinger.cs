@@ -21,9 +21,22 @@ namespace Claw3D.Claw
         {
             config = physicsConfig;
             hinge = GetComponent<HingeJoint>();
+
             Rigidbody body = GetComponent<Rigidbody>();
             body.mass = config.fingerMass;
             body.angularDamping = config.fingerAngularDamping;
+            body.solverIterations = config.solverIterations;
+            body.solverVelocityIterations = config.solverVelocityIterations;
+            body.maxAngularVelocity = 20f;
+
+            JointLimits limits = hinge.limits;
+            limits.min = config.closedAngleDegrees - 8f;
+            limits.max = config.openAngleDegrees + 8f;
+            limits.bounciness = 0f;
+            limits.contactDistance = 1f;
+            hinge.limits = limits;
+            hinge.useLimits = true;
+
             ApplyMotor();
         }
 
