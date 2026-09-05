@@ -17,6 +17,9 @@ MonoBehaviour:
   cabinetHeight: 1.05
   shellThickness: 0.04
   trolleySpeed: 0.5
+  trolleyAcceleration: 2.8
+  trolleyDeceleration: 4.2
+  trolleyReverseAcceleration: 6
   xLimits: {x: -0.26, y: 0.26}
   zLimits: {x: -0.26, y: 0.26}
   topY: 1
@@ -24,13 +27,16 @@ MonoBehaviour:
   railY: 0.96
   dropSpeed: 0.55
   liftSpeed: 0.5
+  verticalAcceleration: 2.6
+  verticalDeceleration: 3.8
   returnSpeed: 0.6
+  returnAcceleration: 2.4
   homeXZ: {x: -0.3, y: 0.3}
   cableLength: 0.24
   hubRadius: 0.05
   hubMass: 0.2
-  hubLinearDamping: 0.8
-  hubAngularDamping: 1.75
+  hubLinearDamping: 0.35
+  hubAngularDamping: 0.85
   fingerCount: 3
   fingerMountRadius: 0.032
   fingerMountY: -0.03
@@ -41,9 +47,11 @@ MonoBehaviour:
   fingerAngularDamping: 4
   openAngleDegrees: -48.7
   closedAngleDegrees: 0
-  fingerSpring: 9
-  fingerDamper: 0.45
-  carryStrengthFactor: 0.75
+  fingerMotorMaxForce: 0.38
+  fingerMotorMaxSpeed: 220
+  fingerMotorVelocityGain: 7
+  fingerMotorDeadZone: 0.45
+  carryStrengthFactor: 0.58
   gripSeconds: 0.55
   releaseSeconds: 0.45
   scoreSeconds: 0.9
