@@ -18,6 +18,8 @@ namespace Claw3D.Claw
         private static PhysicsMaterial highFrictionMaterial;
         private static PhysicsMaterial iceyMaterial;
 
+        public float CurrentAngle => hinge == null ? 0f : hinge.angle;
+
         private void Awake()
         {
             if (hinge == null) hinge = GetComponent<HingeJoint>();
@@ -45,8 +47,8 @@ namespace Claw3D.Claw
             body.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
             JointLimits limits = hinge.limits;
-            limits.min = config.fingerClosedAngleDegrees;
-            limits.max = config.fingerOpenAngleDegrees;
+            limits.min = Mathf.Min(config.fingerOpenAngleDegrees, config.fingerClosedAngleDegrees);
+            limits.max = Mathf.Max(config.fingerOpenAngleDegrees, config.fingerClosedAngleDegrees);
             limits.bounciness = 0f;
             limits.contactDistance = config.fingerLimitContactDistance;
             hinge.limits = limits;
@@ -56,23 +58,27 @@ namespace Claw3D.Claw
             hinge.enableCollision = false;
             hinge.enablePreprocessing = true;
 
-            ApplyGrabSettings(
-                config.realisticNormalVelocity,
-                config.grabLinearDamping,
-                config.grabAngularDamping,
-                ClawGripMaterial.MaxFriction);
+            // Do not apply the grab profile's very high drag while the claw is idle/open.
+            // The source grab damping belongs to the active grab profile; applying it here
+            // was effectively freezing the three-arm articulated body before the drop began.
+            clawVelocity = config.realisticNormalVelocity;
+            SetGripMaterial(ClawGripMaterial.MaxFriction);
             SetOpenAmount(1f);
         }
 
         public void SetOpenAmount(float amount)
         {
             openAmount = Mathf.Clamp01(amount);
+
+            // Open/idle motion uses the lightweight source Rigidbody damping. Grab damping is
+            // restored only when a grab profile is explicitly applied at the bottom of the drop.
+            if (openAmount >= 0.999f)
+                RestoreIdleDamping();
         }
 
         public void ApplyGrabSettings(float angularVelocity, float linearDamping, float angularDamping, ClawGripMaterial material)
         {
             clawVelocity = Mathf.Max(0f, angularVelocity);
-            gripMaterial = material;
 
             if (body != null)
             {
@@ -80,9 +86,14 @@ namespace Claw3D.Claw
                 body.angularDamping = Mathf.Max(0f, angularDamping);
             }
 
-            PhysicsMaterial physicsMaterial = ResolveMaterial(material);
-            foreach (Collider collider in GetComponentsInChildren<Collider>(true))
-                collider.material = physicsMaterial;
+            SetGripMaterial(material);
+        }
+
+        public void RestoreIdleDamping()
+        {
+            if (body == null || config == null) return;
+            body.linearDamping = config.fingerIdleLinearDamping;
+            body.angularDamping = config.fingerIdleAngularDamping;
         }
 
         private void DriveTowardTarget()
@@ -90,19 +101,33 @@ namespace Claw3D.Claw
             if (hinge == null || body == null || config == null) return;
 
             float target = Mathf.Lerp(config.fingerClosedAngleDegrees, config.fingerOpenAngleDegrees, openAmount);
-            float error = target - hinge.angle;
+            float error = Mathf.DeltaAngle(hinge.angle, target);
             Vector3 axisWorld = transform.TransformDirection(hinge.axis).normalized;
+
+            float currentAxial = Vector3.Dot(body.angularVelocity, axisWorld);
 
             if (Mathf.Abs(error) <= config.fingerAngleDeadZone)
             {
-                float axial = Vector3.Dot(body.angularVelocity, axisWorld);
-                body.angularVelocity -= axisWorld * axial;
+                body.angularVelocity -= axisWorld * currentAxial;
                 return;
             }
 
-            // The reference drives each free hinge arm through Rigidbody angular velocity.
-            // Contacts are therefore able to stop one finger while the others keep moving.
-            body.angularVelocity = axisWorld * (Mathf.Sign(error) * clawVelocity);
+            float desiredAxial = Mathf.Sign(error) * clawVelocity;
+
+            // Only replace the component around the hinge axis. Preserving the other angular
+            // components lets the whole claw swing naturally with the rope/head Rigidbody.
+            body.angularVelocity += axisWorld * (desiredAxial - currentAxial);
+        }
+
+        private void SetGripMaterial(ClawGripMaterial material)
+        {
+            gripMaterial = material;
+            PhysicsMaterial physicsMaterial = ResolveMaterial(material);
+            foreach (Collider collider in GetComponentsInChildren<Collider>(true))
+            {
+                if (collider.enabled)
+                    collider.material = physicsMaterial;
+            }
         }
 
         private PhysicsMaterial ResolveMaterial(ClawGripMaterial material)
