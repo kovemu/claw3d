@@ -26,7 +26,8 @@ MonoBehaviour:
   loweringStepPerFixedUpdate: 0.004
   loweringDistance: 0.55
   ropeSubsteps: 4
-  ropeActiveParticles: 5
+  ropeActiveParticles: 3
+  ropeParticlePoolCapacity: 103
   ropeParticleMass: 0.1
   ropeStretchCompliance: 0
   ropeBendCompliance: 0.1
@@ -37,18 +38,18 @@ MonoBehaviour:
   ropeAttachmentCompliance: 0
   ropeBodyVelocityCoupling: 0.55
   hubRadius: 0.05
-  hubMass: 1
+  hubMass: 0.25
   hubLinearDamping: 0
   hubAngularDamping: 0.05
   fingerCount: 3
   fingerMountRadius: 0.045
   fingerMountY: -0.04
-  fingerMass: 1
+  fingerMass: 0.25
   fingerIdleLinearDamping: 0
   fingerIdleAngularDamping: 0.05
   fingerClosedAngleDegrees: 0
   fingerOpenAngleDegrees: 45
-  fingerLimitContactDistance: 0.2
+  fingerLimitContactDistance: 0
   fingerAngleDeadZone: 0.6
   difficultyMode: 1
   grabLinearDamping: 10
