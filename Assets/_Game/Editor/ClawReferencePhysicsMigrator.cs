@@ -15,17 +15,12 @@ namespace Claw3D.Editor
         private const string PrototypeSceneName = "ClawPrototype";
         private const string ConfigPath = "Assets/_Game/Config/ClawPhysicsConfig.asset";
 
-        // Verified on the active source ClawMain.002 transform. The arm collider children come
-        // from the same imported claw model family; this is the current source-space -> prototype
-        // scale bridge until the ClawMain.004 root scale is independently recorded as a field.
         private const float ReferenceClawImportScale = 0.2227894217f;
 
         private static readonly Vector3 ReferenceHeadColliderCenter = new(0f, -0.195496231f, 0f);
         private const float ReferenceHeadColliderRadius = 0.11f;
         private const float ReferenceHeadColliderHeight = 0.513159454f;
 
-        // Active source arm pivots expressed relative to the active ClawMain.002 transform position.
-        // Sorted to match the prototype's Finger_1 (front), Finger_2 (+120), Finger_3 (-120) order.
         private static readonly Vector3[] ReferenceFingerPivotOffsets =
         {
             new(-0.0002702177f, -0.0906925201f, 0.0436868667f),
@@ -136,16 +131,13 @@ namespace Claw3D.Editor
                     hinge.useLimits = true;
                     hinge.enableCollision = false;
                     hinge.enablePreprocessing = true;
-
-                    // Source ClawMain.004 uses local +Z as its hinge axis. The temporary
-                    // prototype finger frame maps source +Z to prototype -X.
                     hinge.axis = -Vector3.right;
                     hinge.anchor = Vector3.zero;
                     hinge.autoConfigureConnectedAnchor = true;
 
                     JointLimits limits = hinge.limits;
-                    limits.min = config.fingerClosedAngleDegrees;
-                    limits.max = config.fingerOpenAngleDegrees;
+                    limits.min = Mathf.Min(config.fingerOpenAngleDegrees, config.fingerClosedAngleDegrees);
+                    limits.max = Mathf.Max(config.fingerOpenAngleDegrees, config.fingerClosedAngleDegrees);
                     limits.bounciness = 0f;
                     limits.contactDistance = config.fingerLimitContactDistance;
                     hinge.limits = limits;
@@ -155,10 +147,6 @@ namespace Claw3D.Editor
                 finger.Configure(config);
             }
 
-            // The old prototype placed the head cableLength (0.24 m) below the trolley. The extracted
-            // source rope begins at only 0.027136756 m of rest length and its MOVER attachment is offset.
-            // Align the temporary geometry to this verified rope geometry before initializing the pool,
-            // otherwise the hard zero-compliance constraints start heavily stretched and explode.
             if (!Application.isPlaying)
             {
                 Vector3 topAttachment = trolleyBody.position + trolleyBody.rotation * config.ropeTopAttachmentOffset;
@@ -200,10 +188,9 @@ namespace Claw3D.Editor
             EditorSceneManager.MarkSceneDirty(scene);
             SceneView.RepaintAll();
             Debug.Log(
-                "Claw3D: pooled reference rope + extracted collider/pivot rig applied. " +
-                $"Unity {1f / config.fixedTimestep:0} Hz, rope {config.ropeSubsteps} substeps, " +
-                $"initial/pool particles {config.ropeActiveParticles}/{config.ropeParticlePoolCapacity}, " +
-                $"head collider Capsule, finger colliders 4 Capsule + 2 Box each.");
+                "Claw3D: source-semantic claw rig applied. " +
+                $"Open {config.fingerOpenAngleDegrees:0.#}°, closed {config.fingerClosedAngleDegrees:0.#}°, " +
+                $"rope {config.ropeSubsteps} substeps, head collider Capsule, finger colliders 4 Capsule + 2 Box each.");
         }
 
         private static void AlignReferenceFingerPivots(Transform hub, ClawFinger[] fingers)
@@ -225,7 +212,6 @@ namespace Claw3D.Editor
 
         private static void ApplyReferenceHeadCollider(GameObject hub)
         {
-            // Disable the primitive SphereCollider from the early prototype.
             foreach (Collider existing in hub.GetComponents<Collider>())
                 existing.enabled = false;
 
@@ -238,9 +224,6 @@ namespace Claw3D.Editor
             root.transform.localPosition = Vector3.zero;
             root.transform.localRotation = Quaternion.identity;
 
-            // The prototype sphere is visually scaled, while the source collider dimensions are
-            // defined under the source ClawMain scale. Counter-scale the helper so its collider
-            // dimensions can be expressed directly in prototype world metres.
             Vector3 parentScale = hub.transform.lossyScale;
             root.transform.localScale = new Vector3(
                 SafeInverse(parentScale.x),
@@ -260,16 +243,12 @@ namespace Claw3D.Editor
             if (previous != null)
                 Object.DestroyImmediate(previous.gameObject);
 
-            // Disable the three capsule colliders created by the old visual-segment prototype.
             foreach (Collider existing in finger.GetComponentsInChildren<Collider>(true))
                 existing.enabled = false;
 
             GameObject frame = new("ReferenceColliders");
             frame.transform.SetParent(finger.transform, false);
             frame.transform.localPosition = Vector3.zero;
-
-            // Source finger geometry lives in XY with hinge axis +Z. Our temporary visual finger
-            // is authored in YZ with hinge axis -X. -90 degrees around Y performs that axis map.
             frame.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
             frame.transform.localScale = Vector3.one * ReferenceClawImportScale;
 
