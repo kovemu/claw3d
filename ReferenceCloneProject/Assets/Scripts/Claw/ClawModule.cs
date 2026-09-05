@@ -26,7 +26,7 @@ namespace Claw
         [SerializeField] protected UnityEvent OnOpenClaw = new UnityEvent();
         [SerializeField] protected UnityEvent OnStartGrab = new UnityEvent();
 
-        // Source direction state: Open=-1, Close=+1.
+        // Verified source field HIBDPCIHGNI: Open=-1, Close=+1.
         protected int directionMultiplier;
 
         public float LoweringDistance
@@ -35,41 +35,74 @@ namespace Claw
             set { loweringDistance = value; }
         }
 
+        private void Awake()
+        {
+            InitializeSourceReferences();
+            ApplyCurrentMaterial();
+        }
+
+        protected virtual void InitializeSourceReferences()
+        {
+            ClawReferences references = GetComponent<ClawReferences>();
+            if (references != null)
+                claws = references.claws;
+        }
+
         public override void Initialize(ClawMachine owner)
         {
+            // Source Module.Initialize only stores the owner. Claw references/material are prepared in Awake.
             base.Initialize(owner);
-            ApplyCurrentMaterial();
         }
 
         public virtual void FullGrab()
         {
             internalState = ClawInternalState.lowering;
-            OnStartGrab.Invoke();
+            if (OnStartGrab != null)
+                OnStartGrab.Invoke();
         }
 
         public virtual void PhysicsUpdate()
         {
-            if (clawSettings == null) return;
-
             float command = clawSettings.clawVelocity * directionMultiplier;
+
             for (int i = 0; i < claws.Count; ++i)
+                claws[i].SetAngularVelocity(command);
+
+            if (internalState == ClawInternalState.none)
+                return;
+
+            switch (internalState)
             {
-                ClawArm arm = claws[i];
-                if (arm != null)
-                    arm.SetAngularVelocity(command);
+                case ClawInternalState.lowering:
+                    LoweringPhysicsUpdate();
+                    break;
+
+                case ClawInternalState.goingUp:
+                    GoingUpPhysicsUpdate();
+                    break;
+
+                case ClawInternalState.closing:
+                    break;
             }
         }
+
+        // The source base class has virtual distance-check implementations in these slots.
+        // Gate 1 uses ClawRope, which overrides both slots with Obi rest-length control.
+        protected virtual void LoweringPhysicsUpdate() { }
+        protected virtual void GoingUpPhysicsUpdate() { }
 
         public void OpenClaw()
         {
             directionMultiplier = -1;
-            OnOpenClaw.Invoke();
+            if (OnOpenClaw != null)
+                OnOpenClaw.Invoke();
         }
 
         public void CloseClaw()
         {
             directionMultiplier = 1;
-            OnCloseClaw.Invoke();
+            if (OnCloseClaw != null)
+                OnCloseClaw.Invoke();
         }
 
         public ClawSettings GetCurrentClawSettings()
@@ -85,13 +118,8 @@ namespace Claw
 
         protected void ApplyCurrentMaterial()
         {
-            PhysicMaterial material = clawSettings == null ? null : clawSettings.clawPhysicMat;
             for (int i = 0; i < claws.Count; ++i)
-            {
-                ClawArm arm = claws[i];
-                if (arm != null)
-                    arm.ApplyPhysicMaterial(material);
-            }
+                claws[i].ApplyPhysicMaterial(clawSettings.clawPhysicMat);
         }
     }
 }
