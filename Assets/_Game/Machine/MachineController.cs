@@ -45,7 +45,7 @@ namespace Claw3D.Machine
 
             stateTimer += Time.deltaTime;
 
-            if (state != MachineState.Idle && state != MachineState.Aim)
+            if (state == MachineState.Grip || state == MachineState.Lift || state == MachineState.Return)
             {
                 grabProfileTimer += Time.deltaTime;
                 if (!dyingProfileChanged &&
@@ -145,15 +145,19 @@ namespace Claw3D.Machine
                     break;
 
                 case MachineState.Drop:
+                    // Choose the profile now, but do NOT apply the high grab damping while the
+                    // claw is descending. That was freezing the articulated three-finger rig.
+                    claw.SelectGrabProfile(failedTries);
+                    claw.SetOpenAmount(1f);
                     grabProfileTimer = 0f;
                     dyingProfileChanged = false;
-                    claw.SelectAndApplyGrabProfile(failedTries);
-                    claw.SetOpenAmount(1f);
                     prompt = "Dropping...";
                     break;
 
                 case MachineState.Grip:
+                    claw.ApplySelectedGrabProfile();
                     claw.SetOpenAmount(0f);
+                    grabProfileTimer = 0f;
                     prompt = "Gripping...";
                     break;
 
@@ -184,10 +188,10 @@ namespace Claw3D.Machine
         {
             string mode = config == null ? "?" : config.difficultyMode.ToString();
             GUI.Box(
-                new Rect(12f, 12f, 470f, 132f),
+                new Rect(12f, 12f, 500f, 152f),
                 $"CLAW3D | {state} | {mode}\n{prompt}\n" +
                 $"Grab: {claw.ActiveGrabType}  Failed: {failedTries}  Prizes: {prizes}\n" +
-                $"Swing: {claw.HubSwingSpeed:0.00} m/s\n" +
+                $"Swing: {claw.HubSwingSpeed:0.00} m/s  Finger angle: {claw.AverageFingerAngle:0.0}°\n" +
                 $"Rope: {claw.RopeRestLength:0.000} m  Particles: {claw.RopeActiveParticles}  Elements: {claw.RopeElements}");
         }
     }
