@@ -112,9 +112,9 @@ namespace Claw3D.Physics
         public float fingerMass = 0.25f;
         public float fingerIdleLinearDamping = 0f;
         public float fingerIdleAngularDamping = 0.05f;
-        [Tooltip("Active HingeJoint limits are 0..45 degrees. Spring and motor are disabled.")]
-        public float fingerClosedAngleDegrees = 0f;
-        public float fingerOpenAngleDegrees = 45f;
+        [Tooltip("The active HingeJoint range is 0..45 degrees. In the source pose, 0 degrees is OPEN and 45 degrees is CLOSED.")]
+        public float fingerClosedAngleDegrees = 45f;
+        public float fingerOpenAngleDegrees = 0f;
         [Tooltip("Active HingeJoint contactDistance is 0. The nearby serialized 0.2 value is bounceMinVelocity, not contactDistance.")]
         public float fingerLimitContactDistance = 0f;
         public float fingerAngleDeadZone = 0.6f;
