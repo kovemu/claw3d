@@ -16,18 +16,17 @@ namespace Claw
 
         private Bounds cachedBounds;
         private Vector3 startPosition;
-        private float distanceMoved;
+        private Vector2 returnVector;
+        private int returnDirection;
+        private bool returningSecondAxis;
         private bool inverted;
-        private Coroutine returnDelayCoroutine;
+        private float distanceMoved;
 
         public override void Initialize(ClawMachine owner)
         {
+            startPosition = clawMoverTrans.position;
+            cachedBounds = meshBounds.bounds;
             base.Initialize(owner);
-
-            if (meshBounds != null)
-                cachedBounds = meshBounds.bounds;
-            if (clawMoverTrans != null)
-                startPosition = clawMoverTrans.position;
         }
 
         public Transform GetMoverTrans()
@@ -49,94 +48,116 @@ namespace Claw
 
         public void MoveClaw(Vector2 input)
         {
-            if (clawMoverTrans == null || clawMoverRb == null) return;
-
             if (inverted)
                 input = new Vector2(input.y, input.x);
 
-            Vector2 step = input * speed;
+            input *= speed;
+
             Vector3 oldPosition = clawMoverTrans.position;
             Vector3 newPosition = oldPosition;
 
-            float proposedX = oldPosition.x + step.x;
-            if (IsInsideX(proposedX))
-                newPosition.x = proposedX;
+            Vector3 xCandidate = oldPosition + Vector3.right * input.x;
+            if (cachedBounds.Contains(xCandidate))
+                newPosition += Vector3.right * input.x;
 
-            float proposedZ = oldPosition.z + step.y;
-            if (IsInsideZ(proposedZ))
-                newPosition.z = proposedZ;
+            Vector3 zCandidate = oldPosition + Vector3.forward * input.y;
+            if (cachedBounds.Contains(zCandidate))
+                newPosition += Vector3.forward * input.y;
 
+            // Source also starts/stops the x/y movement loop sounds here.
             distanceMoved += Vector3.Distance(newPosition, oldPosition);
             clawMoverRb.MovePosition(newPosition);
         }
 
         public void UpdateReturning()
         {
-            if (clawMoverTrans == null || clawMoverRb == null) return;
-
-            Vector3 current = clawMoverTrans.position;
-            Vector3 next = current;
-
             if (returnAxisAtATime)
             {
-                // Verified canonical return order: Z first, then X.
-                if (!Mathf.Approximately(current.z, startPosition.z))
-                    next.z = Mathf.MoveTowards(current.z, startPosition.z, speed);
-                else
-                    next.x = Mathf.MoveTowards(current.x, startPosition.x, speed);
-            }
-            else
-            {
-                Vector2 planar = Vector2.MoveTowards(
-                    new Vector2(current.x, current.z),
-                    new Vector2(startPosition.x, startPosition.z),
-                    speed);
-                next.x = planar.x;
-                next.z = planar.y;
+                UpdateReturningAxisAtATime();
+                return;
             }
 
-            distanceMoved += Vector3.Distance(next, current);
-            clawMoverRb.MovePosition(next);
-
-            bool xDone = Mathf.Abs(next.x - startPosition.x) <= 0.00001f;
-            bool zDone = Mathf.Abs(next.z - startPosition.z) <= 0.00001f;
-            if (!xDone || !zDone || clawMachine == null) return;
-
-            clawMachine.SetMachineState(ClawMachineState.waitToOpen);
-
-            if (returnDelayCoroutine != null)
-                StopCoroutine(returnDelayCoroutine);
-            returnDelayCoroutine = StartCoroutine(OpenAfterDelay());
+            UpdateReturningTogether();
         }
 
         public void CancelReturning()
         {
-            if (returnDelayCoroutine != null)
+            returnDirection = 0;
+            returningSecondAxis = false;
+            returnVector = Vector2.zero;
+        }
+
+        private void UpdateReturningAxisAtATime()
+        {
+            if (!returningSecondAxis)
             {
-                StopCoroutine(returnDelayCoroutine);
-                returnDelayCoroutine = null;
+                ReturnZAxis();
+                return;
             }
+
+            ReturnXAxis();
         }
 
-        private IEnumerator OpenAfterDelay()
+        private void ReturnZAxis()
         {
-            yield return new WaitForSeconds(delayToOpen);
-            returnDelayCoroutine = null;
+            if (returnDirection == 0)
+                returnDirection = (int)Mathf.Sign(startPosition.z - clawMoverTrans.position.z);
 
-            if (clawMachine != null && clawMachine.GetCurState() == ClawMachineState.waitToOpen)
-                clawMachine.SetMachineState(ClawMachineState.openingClaw);
+            MoveClaw(new Vector2(0f, returnDirection));
+
+            int newSign = (int)Mathf.Sign(startPosition.z - clawMoverTrans.position.z);
+            if (newSign == returnDirection)
+                return;
+
+            returnDirection = 0;
+            returningSecondAxis = true;
         }
 
-        private bool IsInsideX(float x)
+        private void ReturnXAxis()
         {
-            if (meshBounds == null) return true;
-            return x >= cachedBounds.min.x && x <= cachedBounds.max.x;
+            if (returnDirection == 0)
+                returnDirection = (int)Mathf.Sign(startPosition.x - clawMoverTrans.position.x);
+
+            MoveClaw(new Vector2(returnDirection, 0f));
+
+            int newSign = (int)Mathf.Sign(startPosition.x - clawMoverTrans.position.x);
+            if (newSign == returnDirection)
+                return;
+
+            returnDirection = 0;
+            clawMachine.SetMachineState(ClawMachineState.waitToOpen);
+            StartCoroutine(ChangeMachineStateAfterDelay(delayToOpen, ClawMachineState.openingClaw));
+            returningSecondAxis = false;
+            MoveClaw(Vector2.zero);
         }
 
-        private bool IsInsideZ(float z)
+        private void UpdateReturningTogether()
         {
-            if (meshBounds == null) return true;
-            return z >= cachedBounds.min.z && z <= cachedBounds.max.z;
+            Vector3 current = clawMoverTrans.position;
+
+            if (current.x <= startPosition.x && current.z <= startPosition.z)
+            {
+                returnVector = Vector2.zero;
+                clawMachine.SetMachineState(ClawMachineState.waitToOpen);
+                StartCoroutine(ChangeMachineStateAfterDelay(delayToOpen, ClawMachineState.openingClaw));
+                return;
+            }
+
+            if (returnVector == Vector2.zero)
+            {
+                Vector3 direction = startPosition - current;
+                direction.y = 0f;
+                direction.Normalize();
+                returnVector = new Vector2(direction.x, direction.z);
+            }
+
+            MoveClaw(returnVector);
+        }
+
+        private IEnumerator ChangeMachineStateAfterDelay(float delay, ClawMachineState newState)
+        {
+            yield return new WaitForSeconds(delay);
+            clawMachine.SetMachineState(newState);
         }
     }
 }
