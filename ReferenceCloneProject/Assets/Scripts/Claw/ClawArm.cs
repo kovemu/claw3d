@@ -18,7 +18,7 @@ public sealed class ClawArm
     {
         if (rb == null) return;
 
-        Collider[] colliders = rb.GetComponentsInChildren<Collider>(true);
+        Collider[] colliders = rb.GetComponentsInChildren<Collider>();
         for (int i = 0; i < colliders.Length; ++i)
             colliders[i].material = material;
     }
