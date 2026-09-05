@@ -107,7 +107,6 @@ namespace Claw3D.Claw
                 velocities[i] = Vector3.zero;
             }
 
-            // Dynamic bottom attachment starts coincident with the actual claw body.
             positions[count - 1] = b;
             initialized = true;
         }
@@ -136,13 +135,9 @@ namespace Claw3D.Claw
                     positions[i] += velocities[i] * subDt;
                 }
 
-                // Target Obi rope uses a single distance iteration per substep. With four
-                // substeps and only four structural elements this is already quite stiff.
                 SolveDistanceConstraints(segmentLength, particleInvMass);
                 SolveSoftBending(subDt);
                 SolveDynamicBottomAttachment(ref proxyHead, particleInvMass, bodyInvMass);
-
-                // Re-satisfy the structural chain after attachment correction.
                 SolveDistanceConstraints(segmentLength, particleInvMass);
                 positions[0] = top;
 
@@ -178,9 +173,6 @@ namespace Claw3D.Claw
         {
             if (positions.Length < 3 || config.ropeBendCompliance <= 0f) return;
 
-            // Compliance-to-stiffness mapping inspired by XPBD. This intentionally stays
-            // soft: the target rope is bendable, while its zero stretch compliance keeps
-            // the cable length visually firm.
             float dt2 = subDt * subDt;
             float stiffness = dt2 / (dt2 + Mathf.Max(0.000001f, config.ropeBendCompliance));
 
@@ -198,9 +190,6 @@ namespace Claw3D.Claw
             float totalInvMass = particleInvMass + bodyInvMass;
             if (totalInvMass <= 0f) return;
 
-            // Zero-compliance dynamic attachment. The lighter rope particle receives most
-            // of the positional correction while the one-kilogram claw body still receives
-            // a real reaction, allowing swing and load to feed back into the mechanism.
             positions[last] += delta * (particleInvMass / totalInvMass);
             proxyHead -= delta * (bodyInvMass / totalInvMass);
         }
@@ -216,7 +205,7 @@ namespace Claw3D.Claw
 
             float dt = Mathf.Max(0.0001f, Time.fixedDeltaTime);
             Vector3 velocityCorrection = correction / dt * config.ropeBodyVelocityCoupling;
-            float maxCorrectionSpeed = 8f;
+            const float maxCorrectionSpeed = 8f;
             if (velocityCorrection.magnitude > maxCorrectionSpeed)
                 velocityCorrection = velocityCorrection.normalized * maxCorrectionSpeed;
 
