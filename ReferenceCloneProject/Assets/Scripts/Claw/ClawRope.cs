@@ -13,62 +13,55 @@ namespace Claw
         private float initialRestLength;
         private Coroutine closeDelayCoroutine;
 
-        public override void Initialize(ClawMachine owner)
+        protected override void InitializeSourceReferences()
         {
-            base.Initialize(owner);
-            if (rope != null)
-                initialRestLength = rope.restLength;
+            base.InitializeSourceReferences();
+            initialRestLength = rope.restLength;
         }
 
         public override void FullGrab()
         {
             base.FullGrab();
+            // Source also starts loop sound "claw.rope.lower" here.
         }
 
-        public override void PhysicsUpdate()
+        protected override void LoweringPhysicsUpdate()
         {
-            base.PhysicsUpdate();
+            float requestedLength = rope.restLength + loweringSpeed;
+            cursor.ChangeLength(requestedLength);
 
-            if (cursor == null || rope == null) return;
+            if (rope.restLength < initialRestLength + loweringDistance)
+                return;
 
-            switch (internalState)
-            {
-                case ClawInternalState.lowering:
-                    cursor.ChangeLength(rope.restLength + loweringSpeed);
-
-                    if (rope.restLength >= initialRestLength + loweringDistance)
-                    {
-                        CloseClaw();
-                        internalState = ClawInternalState.closing;
-
-                        if (closeDelayCoroutine != null)
-                            StopCoroutine(closeDelayCoroutine);
-                        closeDelayCoroutine = StartCoroutine(WaitBeforeGoingUp());
-                    }
-                    break;
-
-                case ClawInternalState.goingUp:
-                    cursor.ChangeLength(rope.restLength - loweringSpeed);
-
-                    if (rope.restLength <= initialRestLength)
-                    {
-                        cursor.ChangeLength(initialRestLength);
-                        internalState = ClawInternalState.none;
-
-                        if (clawMachine != null)
-                            clawMachine.SetMachineState(ClawMachineState.returning);
-                    }
-                    break;
-            }
+            CloseClaw();
+            internalState = ClawInternalState.closing;
+            closeDelayCoroutine = StartCoroutine(ChangeStateAfterDelay(timeToClose, ClawInternalState.goingUp));
+            // Source cancels loop sound "claw.rope.lower" here.
         }
 
-        private IEnumerator WaitBeforeGoingUp()
+        protected override void GoingUpPhysicsUpdate()
         {
-            yield return new WaitForSeconds(timeToClose);
+            float requestedLength = rope.restLength - loweringSpeed;
+            cursor.ChangeLength(requestedLength);
+
+            if (rope.restLength > initialRestLength)
+                return;
+
+            cursor.ChangeLength(initialRestLength);
+            internalState = ClawInternalState.none;
+
+            if (clawMachine != null)
+                clawMachine.SetMachineState(ClawMachineState.returning);
+
+            // Source cancels loop sound "claw.rope.raise" here.
+        }
+
+        private IEnumerator ChangeStateAfterDelay(float delay, ClawInternalState newState)
+        {
+            yield return new WaitForSeconds(delay);
+            internalState = newState;
             closeDelayCoroutine = null;
-
-            if (internalState == ClawInternalState.closing)
-                internalState = ClawInternalState.goingUp;
+            // Source starts loop sound "claw.rope.raise" after this delay.
         }
     }
 }
