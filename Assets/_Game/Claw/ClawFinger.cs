@@ -17,6 +17,11 @@ namespace Claw3D.Claw
             if (hinge == null) hinge = GetComponent<HingeJoint>();
         }
 
+        private void FixedUpdate()
+        {
+            ApplyMotor();
+        }
+
         public void Configure(ClawPhysicsConfig physicsConfig)
         {
             config = physicsConfig;
@@ -40,19 +45,22 @@ namespace Claw3D.Claw
             hinge.limits = limits;
             hinge.useLimits = true;
 
+            // A spring-only claw effectively has unlimited holding authority. A real claw
+            // should stall against a prize and can be forced open by leverage/load, so the
+            // hinge motor is explicitly force-limited instead.
+            hinge.useSpring = false;
+            hinge.useMotor = true;
             ApplyMotor();
         }
 
         public void SetOpenAmount(float amount)
         {
             openAmount = Mathf.Clamp01(amount);
-            ApplyMotor();
         }
 
         public void SetStrengthScale(float scale)
         {
             strengthScale = Mathf.Clamp(scale, 0.05f, 1f);
-            ApplyMotor();
         }
 
         private void ApplyMotor()
@@ -60,12 +68,27 @@ namespace Claw3D.Claw
             if (hinge == null || config == null) return;
 
             float target = Mathf.Lerp(config.closedAngleDegrees, config.openAngleDegrees, openAmount);
-            JointSpring spring = hinge.spring;
-            spring.spring = config.fingerSpring * strengthScale;
-            spring.damper = config.fingerDamper;
-            spring.targetPosition = target;
-            hinge.spring = spring;
-            hinge.useSpring = true;
+            float error = target - hinge.angle;
+
+            JointMotor motor = hinge.motor;
+            motor.force = Mathf.Max(0.001f, config.fingerMotorMaxForce * strengthScale);
+            motor.freeSpin = false;
+
+            if (Mathf.Abs(error) <= config.fingerMotorDeadZone)
+            {
+                motor.targetVelocity = 0f;
+            }
+            else
+            {
+                motor.targetVelocity = Mathf.Clamp(
+                    error * config.fingerMotorVelocityGain,
+                    -config.fingerMotorMaxSpeed,
+                    config.fingerMotorMaxSpeed);
+            }
+
+            hinge.motor = motor;
+            hinge.useMotor = true;
+            hinge.useSpring = false;
         }
     }
 }
