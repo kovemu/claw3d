@@ -4,10 +4,10 @@ using UnityEngine;
 namespace Claw3D.Claw
 {
     /// <summary>
-    /// Lightweight variable-length rope for the prototype. The reference game changes
-    /// ObiRope rest length; this reproduces the same gameplay contract without depending
-    /// on the proprietary Obi package: the rope may go slack, but it cannot stretch past
-    /// its current rest length.
+    /// Small PBD rope tailored to the claw prototype. It independently recreates the
+    /// important runtime structure observed in the reference: a very low-resolution rope,
+    /// multiple substeps, distance constraints, soft bending, a kinematic top attachment,
+    /// and a dynamic bottom attachment that exchanges motion with the claw Rigidbody.
     /// </summary>
     public sealed class ClawRopeConstraint : MonoBehaviour
     {
@@ -17,11 +17,16 @@ namespace Claw3D.Claw
         [SerializeField] private float initialLength;
         [SerializeField] private float currentLength;
 
-        private float previousLength;
+        private Vector3[] positions;
+        private Vector3[] velocities;
+        private Vector3[] stepStartPositions;
+        private bool initialized;
 
         public float InitialLength => initialLength;
         public float CurrentLength => currentLength;
         public float MaximumDropLength => initialLength + (config == null ? 0f : config.loweringDistance);
+        public int ParticleCount => positions == null ? 0 : positions.Length;
+        public bool HasSimulationPoints => initialized && positions != null && positions.Length >= 2;
 
         public void Configure(ClawPhysicsConfig physicsConfig, Rigidbody carriageBody, Rigidbody headBody)
         {
@@ -30,20 +35,19 @@ namespace Claw3D.Claw
             clawHead = headBody;
             initialLength = Mathf.Max(0.01f, config.cableLength);
             currentLength = initialLength;
-            previousLength = currentLength;
+            InitializeParticles();
         }
 
         public void ResetLength()
         {
             currentLength = initialLength;
-            previousLength = currentLength;
+            InitializeParticles();
         }
 
         public bool ExtendOneStep()
         {
             if (config == null) return true;
             float target = initialLength + config.loweringDistance;
-            previousLength = currentLength;
             currentLength = Mathf.MoveTowards(currentLength, target, config.loweringStepPerFixedUpdate);
             return Mathf.Abs(currentLength - target) < 0.00001f;
         }
@@ -51,48 +55,172 @@ namespace Claw3D.Claw
         public bool RetractOneStep()
         {
             if (config == null) return true;
-            previousLength = currentLength;
             currentLength = Mathf.MoveTowards(currentLength, initialLength, config.loweringStepPerFixedUpdate);
             return Mathf.Abs(currentLength - initialLength) < 0.00001f;
         }
 
-        private void FixedUpdate()
+        public Vector3 GetParticlePosition(int index)
         {
-            EnforceConstraint();
+            if (!HasSimulationPoints) return transform.position;
+            index = Mathf.Clamp(index, 0, positions.Length - 1);
+            return positions[index];
         }
 
-        private void EnforceConstraint()
+        private void FixedUpdate()
         {
-            if (carriage == null || clawHead == null || currentLength <= 0f) return;
+            if (!EnsureReady()) return;
+            SimulateRope();
+        }
 
-            Vector3 anchor = carriage.position;
-            Vector3 delta = clawHead.position - anchor;
-            float distance = delta.magnitude;
-            if (distance < 0.00001f) return;
+        private bool EnsureReady()
+        {
+            if (config == null || carriage == null || clawHead == null) return false;
+            int desiredCount = Mathf.Max(2, config.ropeActiveParticles);
+            if (!initialized || positions == null || positions.Length != desiredCount)
+                InitializeParticles();
+            return initialized;
+        }
 
-            Vector3 direction = delta / distance;
-
-            // Rope is a unilateral constraint: slack is allowed, stretching is not.
-            if (distance > currentLength)
-                clawHead.position = anchor + direction * currentLength;
-
-            Vector3 velocity = clawHead.linearVelocity;
-            float radialVelocity = Vector3.Dot(velocity, direction);
-            float shrinkSpeed = Mathf.Max(0f, previousLength - currentLength) / Mathf.Max(Time.fixedDeltaTime, 0.0001f);
-
-            if (shrinkSpeed > 0f)
+        private void InitializeParticles()
+        {
+            if (config == null || carriage == null || clawHead == null)
             {
-                // A shortening rest length physically reels the claw upward while preserving
-                // tangential velocity, which is what creates the characteristic return swing.
-                Vector3 tangential = velocity - direction * radialVelocity;
-                clawHead.linearVelocity = tangential - direction * shrinkSpeed;
-            }
-            else if (distance >= currentLength * 0.999f && radialVelocity > 0f)
-            {
-                clawHead.linearVelocity -= direction * radialVelocity * config.ropeRadialDamping;
+                initialized = false;
+                return;
             }
 
-            previousLength = currentLength;
+            int count = Mathf.Max(2, config.ropeActiveParticles);
+            positions = new Vector3[count];
+            velocities = new Vector3[count];
+            stepStartPositions = new Vector3[count];
+
+            Vector3 a = carriage.worldCenterOfMass;
+            Vector3 b = clawHead.worldCenterOfMass;
+            Vector3 direction = b - a;
+            if (direction.sqrMagnitude < 0.000001f) direction = Vector3.down;
+            direction.Normalize();
+
+            for (int i = 0; i < count; i++)
+            {
+                float t = i / (float)(count - 1);
+                positions[i] = Vector3.Lerp(a, a + direction * currentLength, t);
+                velocities[i] = Vector3.zero;
+            }
+
+            // Dynamic bottom attachment starts coincident with the actual claw body.
+            positions[count - 1] = b;
+            initialized = true;
+        }
+
+        private void SimulateRope()
+        {
+            int substeps = Mathf.Max(1, config.ropeSubsteps);
+            float subDt = Time.fixedDeltaTime / substeps;
+            float segmentLength = currentLength / (positions.Length - 1);
+            float particleInvMass = 1f / Mathf.Max(0.0001f, config.ropeParticleMass);
+            float bodyInvMass = clawHead.isKinematic ? 0f : 1f / Mathf.Max(0.0001f, clawHead.mass);
+
+            Vector3 actualHeadStart = clawHead.worldCenterOfMass;
+            Vector3 proxyHead = actualHeadStart;
+
+            for (int step = 0; step < substeps; step++)
+            {
+                Vector3 top = carriage.worldCenterOfMass;
+                positions[0] = top;
+                velocities[0] = Vector3.zero;
+
+                for (int i = 1; i < positions.Length; i++)
+                {
+                    stepStartPositions[i] = positions[i];
+                    velocities[i] += UnityEngine.Physics.gravity * subDt;
+                    positions[i] += velocities[i] * subDt;
+                }
+
+                // Target Obi rope uses a single distance iteration per substep. With four
+                // substeps and only four structural elements this is already quite stiff.
+                SolveDistanceConstraints(segmentLength, particleInvMass);
+                SolveSoftBending(subDt);
+                SolveDynamicBottomAttachment(ref proxyHead, particleInvMass, bodyInvMass);
+
+                // Re-satisfy the structural chain after attachment correction.
+                SolveDistanceConstraints(segmentLength, particleInvMass);
+                positions[0] = top;
+
+                for (int i = 1; i < positions.Length; i++)
+                    velocities[i] = (positions[i] - stepStartPositions[i]) / Mathf.Max(0.0001f, subDt);
+            }
+
+            ApplyBottomAttachmentToRigidbody(actualHeadStart, proxyHead);
+        }
+
+        private void SolveDistanceConstraints(float restLength, float invMass)
+        {
+            for (int i = 0; i < positions.Length - 1; i++)
+            {
+                Vector3 delta = positions[i + 1] - positions[i];
+                float distance = delta.magnitude;
+                if (distance < 0.000001f) continue;
+
+                float wA = i == 0 ? 0f : invMass;
+                float wB = invMass;
+                float w = wA + wB;
+                if (w <= 0f) continue;
+
+                float error = distance - restLength;
+                Vector3 correction = delta / distance * (error / w);
+
+                if (wA > 0f) positions[i] += correction * wA;
+                positions[i + 1] -= correction * wB;
+            }
+        }
+
+        private void SolveSoftBending(float subDt)
+        {
+            if (positions.Length < 3 || config.ropeBendCompliance <= 0f) return;
+
+            // Compliance-to-stiffness mapping inspired by XPBD. This intentionally stays
+            // soft: the target rope is bendable, while its zero stretch compliance keeps
+            // the cable length visually firm.
+            float dt2 = subDt * subDt;
+            float stiffness = dt2 / (dt2 + Mathf.Max(0.000001f, config.ropeBendCompliance));
+
+            for (int i = 1; i < positions.Length - 1; i++)
+            {
+                Vector3 midpoint = (positions[i - 1] + positions[i + 1]) * 0.5f;
+                positions[i] = Vector3.LerpUnclamped(positions[i], midpoint, stiffness);
+            }
+        }
+
+        private void SolveDynamicBottomAttachment(ref Vector3 proxyHead, float particleInvMass, float bodyInvMass)
+        {
+            int last = positions.Length - 1;
+            Vector3 delta = proxyHead - positions[last];
+            float totalInvMass = particleInvMass + bodyInvMass;
+            if (totalInvMass <= 0f) return;
+
+            // Zero-compliance dynamic attachment. The lighter rope particle receives most
+            // of the positional correction while the one-kilogram claw body still receives
+            // a real reaction, allowing swing and load to feed back into the mechanism.
+            positions[last] += delta * (particleInvMass / totalInvMass);
+            proxyHead -= delta * (bodyInvMass / totalInvMass);
+        }
+
+        private void ApplyBottomAttachmentToRigidbody(Vector3 actualHeadStart, Vector3 proxyHead)
+        {
+            if (clawHead == null || clawHead.isKinematic) return;
+
+            Vector3 correction = proxyHead - actualHeadStart;
+            if (correction.sqrMagnitude < 0.00000001f) return;
+
+            clawHead.position += correction;
+
+            float dt = Mathf.Max(0.0001f, Time.fixedDeltaTime);
+            Vector3 velocityCorrection = correction / dt * config.ropeBodyVelocityCoupling;
+            float maxCorrectionSpeed = 8f;
+            if (velocityCorrection.magnitude > maxCorrectionSpeed)
+                velocityCorrection = velocityCorrection.normalized * maxCorrectionSpeed;
+
+            clawHead.linearVelocity += velocityCorrection;
         }
     }
 }
