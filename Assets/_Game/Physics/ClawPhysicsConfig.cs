@@ -34,8 +34,8 @@ namespace Claw3D.Physics
         public float cabinetHeight = 1.05f;
         public float shellThickness = 0.04f;
 
-        [Header("Carriage - Claw Machine Sim reference")]
-        [Tooltip("Reference ClawMoveModule position step per FixedUpdate.")]
+        [Header("Carriage - verified active ClawMoveModule")]
+        [Tooltip("Active ClawMoveModule position step per FixedUpdate.")]
         public float trolleyStepPerFixedUpdate = 0.007f;
         public bool returnAxisAtATime = true;
         public Vector2 xLimits = new(-0.26f, 0.26f);
@@ -43,30 +43,56 @@ namespace Claw3D.Physics
         public float railY = 0.96f;
         public Vector2 homeXZ = new(-0.30f, 0.30f);
 
-        [Header("Rope length - extracted active ClawRope")]
-        [Tooltip("Our metre-scale scene mapping. The source hierarchy uses a separately scaled Obi solver space.")]
+        [Header("Rope cycle - verified active ClawRope")]
+        [Tooltip("Prototype-only geometric mapping from the old rig. Do not confuse this with the source Obi rope initial rest length below.")]
         public float cableLength = 0.24f;
-        [Tooltip("Active ClawRope loweringSpeed serialized value.")]
+        [Tooltip("Active ClawRope loweringSpeed. The game adds/subtracts this from Obi rope rest length during the cycle.")]
         public float loweringStepPerFixedUpdate = 0.004f;
-        [Tooltip("Active ClawRope loweringDistance serialized value.")]
+        [Tooltip("Active ClawRope loweringDistance.")]
         public float loweringDistance = 0.55f;
 
-        [Header("Obi rope - verified active asset data")]
-        [Tooltip("Active ObiFixedUpdater uses 4 substeps per Unity FixedUpdate.")]
+        [Header("Obi rope - verified active Claw Rope Small blueprint")]
+        [Tooltip("Active ObiFixedUpdater uses exactly four substeps per Unity FixedUpdate.")]
         public int ropeSubsteps = 4;
-        [Tooltip("Claw Rope Small blueprint initialActiveParticleCount / activeParticleCount is 3. The blueprint reserves a much larger particle pool for the cursor to extend the rope.")]
+        [Tooltip("Initial active particles in Claw Rope Small.")]
         public int ropeActiveParticles = 3;
-        [Tooltip("Claw Rope Small serialized positions/restPositions arrays reserve 103 particles. This is capacity, not the initial active count.")]
+        [Tooltip("Total serialized pool: 3 initially active + 100 pooled particles.")]
         public int ropeParticlePoolCapacity = 103;
-        [Tooltip("Prototype approximation only. Do not treat this value as source-verified until the blueprint inverse-mass array is fully mapped.")]
+        [Tooltip("Blueprint inverse mass is 10, so each rope particle has mass 0.1 kg.")]
         public float ropeParticleMass = 0.10f;
+        [Tooltip("Blueprint inter-particle distance used by ObiRopeCursor when adding pooled particles.")]
+        public float ropeInterParticleDistance = 0.021475287f;
+        [Tooltip("Initial active actor rest length: 0.012735528 + 0.014401228.")]
+        public float ropeInitialRestLength = 0.027136756f;
+        public Vector2 ropeInitialElementRestLengths = new(0.012735528f, 0.014401228f);
+        [Tooltip("Distance constraints are enabled with zero stretch compliance.")]
         public float ropeStretchCompliance = 0f;
-        public float ropeBendCompliance = 0.10f;
-        public float ropeMaxBending = 0.013f;
-        public bool ropeSelfCollisions = true;
-        public float ropeCursorMu = 0.531f;
-        public float ropeSourceMu = 0.741f;
+        [Tooltip("Bend constraints are DISABLED on the active ObiRope actor. Kept as zero so the prototype cannot accidentally add fake bend stiffness.")]
+        public float ropeBendCompliance = 0f;
+        [Tooltip("Serialized maxBending is 0.275, but bend constraints are disabled on the active actor.")]
+        public float ropeMaxBending = 0.275f;
+        public bool ropeSelfCollisions = false;
+        [Tooltip("Active ObiRopeCursor m_CursorMu.")]
+        public float ropeCursorMu = 0f;
+        [Tooltip("Active ObiRopeCursor m_SourceMu.")]
+        public float ropeSourceMu = 0f;
+        public bool ropeCursorDirection = true;
+        [Tooltip("Particle group 'start' attaches particle 2 to MOVER; group 'end' attaches particle 0 to the claw head.")]
+        public int ropeStartParticleIndex = 2;
+        public int ropeEndParticleIndex = 0;
+        [Tooltip("Both active ObiParticleAttachment components are Dynamic with zero compliance and infinite break threshold.")]
         public float ropeAttachmentCompliance = 0f;
+        [Tooltip("Active ObiSolver: distance constraint group is Sequential, 1 iteration, SOR 1.")]
+        public int ropeDistanceIterations = 1;
+        [Tooltip("Active ObiSolver: pin constraint group is Parallel, 1 iteration, SOR 1.")]
+        public int ropePinIterations = 1;
+        [Tooltip("Active rope ObiCollisionMaterial 'HighFriction' dynamic friction.")]
+        public float ropeCollisionDynamicFriction = 1f;
+        [Tooltip("Active rope ObiCollisionMaterial 'HighFriction' static friction.")]
+        public float ropeCollisionStaticFriction = 0f;
+
+        [Header("Prototype rope adapter - NOT source values")]
+        [Tooltip("Temporary coupling used only by our current custom rope adapter. Remove when the reference rope solver replacement lands.")]
         [Range(0f, 1f)] public float ropeBodyVelocityCoupling = 0.55f;
 
         [Header("Claw head - verified active Rigidbody")]
