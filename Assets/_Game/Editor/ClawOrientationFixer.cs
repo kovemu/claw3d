@@ -47,9 +47,6 @@ namespace Claw3D.Editor
                 HingeJoint hinge = fingerObject.GetComponent<HingeJoint>();
                 if (hinge != null)
                 {
-                    // Existing prototype geometry was authored around local X in the
-                    // opposite sign. Flipping the axis gives the same physical 0..45
-                    // convention as the reference without turning the visual claw inside out.
                     hinge.axis = -Vector3.right;
                     hinge.useSpring = false;
                     hinge.useMotor = false;
@@ -58,7 +55,7 @@ namespace Claw3D.Editor
                     limits.min = config.fingerClosedAngleDegrees;
                     limits.max = config.fingerOpenAngleDegrees;
                     limits.bounciness = 0f;
-                    limits.contactDistance = 0f;
+                    limits.contactDistance = config.fingerLimitContactDistance;
                     hinge.limits = limits;
                     EditorUtility.SetDirty(hinge);
                 }
