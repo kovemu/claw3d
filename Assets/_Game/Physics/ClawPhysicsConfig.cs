@@ -121,6 +121,15 @@ namespace Claw3D.Physics
         public float toyLinearDamping = 0.9f;
         public float toyAngularDamping = 1.6f;
 
+        [Header("Legacy builder geometry - temporary")]
+        [Tooltip("Only retained so the old scene builder compiles while its generated claw is migrated to the reference rig.")]
+        public float topY = 1.00f;
+        public float fingerFriction = 10f;
+        public Vector3 fingerSegmentLengths = new(0.060f, 0.055f, 0.045f);
+        public Vector3 fingerSegmentCurvesRadians = new(0.12f, 0.50f, 0.95f);
+        public Vector3 fingerSegmentRadii = new(0.010f, 0.0075f, 0.0055f);
+        public float fingerAngularDamping = 0.05f;
+
         [Header("Solver")]
         public int solverIterations = 12;
         public int solverVelocityIterations = 8;
