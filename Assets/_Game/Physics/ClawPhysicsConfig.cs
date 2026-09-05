@@ -91,9 +91,11 @@ namespace Claw3D.Physics
         [Tooltip("Active rope ObiCollisionMaterial 'HighFriction' static friction.")]
         public float ropeCollisionStaticFriction = 0f;
 
-        [Header("Prototype rope adapter - NOT source values")]
-        [Tooltip("Temporary coupling used only by our current custom rope adapter. Remove when the reference rope solver replacement lands.")]
-        [Range(0f, 1f)] public float ropeBodyVelocityCoupling = 0.55f;
+        [Header("Reference rope attachment mapping")]
+        [Tooltip("Verified source-space offset from the active MOVER origin to the rope start attachment. Applied without Transform scale because the prototype trolley primitive is scaled for rendering.")]
+        public Vector3 ropeTopAttachmentOffset = new(-0.00910f, -0.10477f, -0.00210f);
+        [Tooltip("The source end attachment is bound to the ClawMain transform. Exact source offset is not yet independently extracted, so the learning rig uses the transform origin instead of inventing a value.")]
+        public Vector3 ropeHeadAttachmentOffset = Vector3.zero;
 
         [Header("Claw head - verified active Rigidbody")]
         public float hubRadius = 0.05f;
