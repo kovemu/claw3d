@@ -16,6 +16,9 @@ namespace Claw3D.Claw
         public Vector3 HubPosition => hubBody == null ? transform.position : hubBody.position;
         public float HubSwingSpeed => hubBody == null ? 0f : new Vector2(hubBody.linearVelocity.x, hubBody.linearVelocity.z).magnitude;
         public ClawGrabType ActiveGrabType => activeGrabType;
+        public int RopeActiveParticles => rope == null ? 0 : rope.ActiveParticleCount;
+        public int RopeElements => rope == null ? 0 : rope.ElementCount;
+        public float RopeRestLength => rope == null ? 0f : rope.CurrentLength;
 
         public void Configure(
             ClawPhysicsConfig physicsConfig,
