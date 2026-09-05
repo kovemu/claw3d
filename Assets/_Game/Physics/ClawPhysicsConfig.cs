@@ -11,25 +11,38 @@ namespace Claw3D.Physics
         public float cabinetHeight = 1.05f;
         public float shellThickness = 0.04f;
 
-        [Header("Trolley")]
+        [Header("Trolley - horizontal")]
+        [Tooltip("Maximum manual carriage speed.")]
         public float trolleySpeed = 0.50f;
+        [Tooltip("Acceleration while pushing the stick in the current direction. Finite acceleration is important because it excites the hanging claw instead of teleporting it.")]
+        public float trolleyAcceleration = 2.8f;
+        [Tooltip("How quickly the carriage settles after the player releases the stick.")]
+        public float trolleyDeceleration = 4.2f;
+        [Tooltip("Extra acceleration available when the player rapidly reverses direction. This lets deliberate stick flicks build realistic claw swing.")]
+        public float trolleyReverseAcceleration = 6.0f;
         public Vector2 xLimits = new(-0.26f, 0.26f);
         public Vector2 zLimits = new(-0.26f, 0.26f);
+
+        [Header("Trolley - vertical")]
         public float topY = 1.00f;
-        [Tooltip("Lowest trolley height during Drop. Tuned so the open fingers enter the plush pile instead of stopping above it.")]
-        public float bottomY = 0.36f;
+        [Tooltip("Lowest trolley height during Drop. Current prototype tuning puts the open fingers into the prize pile.")]
+        public float bottomY = 0.20f;
         public float railY = 0.96f;
         public float dropSpeed = 0.55f;
         public float liftSpeed = 0.50f;
+        public float verticalAcceleration = 2.6f;
+        public float verticalDeceleration = 3.8f;
         public float returnSpeed = 0.60f;
+        public float returnAcceleration = 2.4f;
         public Vector2 homeXZ = new(-0.30f, 0.30f);
 
         [Header("Pendulum Rig")]
         public float cableLength = 0.24f;
         public float hubRadius = 0.05f;
         public float hubMass = 0.20f;
-        public float hubLinearDamping = 0.80f;
-        public float hubAngularDamping = 1.75f;
+        [Tooltip("Lower than the old prototype so start/stop and stick flicks remain visibly physical instead of being damped away immediately.")]
+        public float hubLinearDamping = 0.35f;
+        public float hubAngularDamping = 0.85f;
 
         [Header("Finger Geometry")]
         public int fingerCount = 3;
@@ -41,14 +54,20 @@ namespace Claw3D.Physics
         public float fingerMass = 0.035f;
         public float fingerAngularDamping = 4.0f;
 
-        [Header("Finger Motor")]
+        [Header("Finger Motor - limited torque")]
         [Tooltip("Open must rotate outward from the inward-curved rest shape. With this hinge axis that is the negative direction.")]
         public float openAngleDegrees = -48.7f;
         public float closedAngleDegrees = 0f;
-        [Tooltip("PhysX spring units differ from Rapier; this is a Unity starting point.")]
-        public float fingerSpring = 9.0f;
-        public float fingerDamper = 0.45f;
-        public float carryStrengthFactor = 0.75f;
+        [Tooltip("Maximum hinge motor force/torque at full strength. Unlike a spring-only claw, an obstructed finger can now stall and be pried open by a prize.")]
+        public float fingerMotorMaxForce = 0.38f;
+        [Tooltip("Maximum commanded finger angular speed in degrees per second.")]
+        public float fingerMotorMaxSpeed = 220f;
+        [Tooltip("Position error to target-velocity gain for the limited-force hinge motor.")]
+        public float fingerMotorVelocityGain = 7.0f;
+        [Tooltip("Motor dead-zone in degrees. Prevents tiny jitter around the target angle.")]
+        public float fingerMotorDeadZone = 0.45f;
+        [Tooltip("Strength retained while lifting/returning. Realistic mode intentionally relaxes after the initial close so marginal catches can slip.")]
+        public float carryStrengthFactor = 0.58f;
 
         [Header("Cycle")]
         public float gripSeconds = 0.55f;
@@ -71,7 +90,7 @@ namespace Claw3D.Physics
         public float toyAngularDamping = 1.6f;
 
         [Header("Solver")]
-        [Tooltip("Rapier reference uses 8 substeps. PhysX uses per-body solver iterations instead.")]
+        [Tooltip("Rapier reference uses multiple substeps. PhysX uses a 60 Hz fixed step plus elevated per-body solver iterations here.")]
         public int solverIterations = 12;
         public int solverVelocityIterations = 8;
         public float fixedTimestep = 1f / 60f;
