@@ -20,11 +20,13 @@ namespace Claw
     {
         [SerializeField] private bool startActive = true;
         [SerializeField] private ClawMachineState curState = ClawMachineState.off;
+        [SerializeField] private ClawMachineSettings settings = new ClawMachineSettings();
         [SerializeField] private ClawMoveModule clawMove;
         [SerializeField] private ClawModule claw;
 
         [SerializeField] private UnityEvent OnStartRound = new UnityEvent();
         [SerializeField] private UnityEvent OnEndRound = new UnityEvent();
+        [SerializeField] private UnityEvent<float> OnClawReturnedToDefaultPosition = new UnityEvent<float>();
 
         private Coroutine openingCoroutine;
 
@@ -45,15 +47,13 @@ namespace Claw
             if (claw != null)
                 claw.Initialize(this);
 
-            curState = startActive ? ClawMachineState.idle : ClawMachineState.off;
+            SetMachineState(startActive ? ClawMachineState.idle : ClawMachineState.off);
         }
 
         public void CalledFixedUpdate()
         {
-            if (curState == ClawMachineState.off) return;
-
-            // Source ordering: input module fixed update occurs before this claw call.
-            // Input reconstruction is intentionally not guessed in Gate 1.
+            // Source calls the input module's fixed update here first. The input module is intentionally
+            // not guessed in Gate 1; the temporary Debug driver supplies MoveClaw calls separately.
             if (claw != null)
                 claw.PhysicsUpdate();
 
@@ -68,40 +68,76 @@ namespace Claw
 
         public void BeginRound()
         {
-            if (curState != ClawMachineState.idle) return;
-            curState = ClawMachineState.running;
-            OnStartRound.Invoke();
+            if (curState == ClawMachineState.idle)
+                SetMachineState(ClawMachineState.running);
         }
 
         public void BeginGrab()
         {
-            if (curState != ClawMachineState.running || claw == null) return;
-            curState = ClawMachineState.grabbing;
-            claw.FullGrab();
+            if (curState == ClawMachineState.running)
+                SetMachineState(ClawMachineState.grabbing);
         }
 
         public void SetMachineState(ClawMachineState next)
         {
             curState = next;
 
-            if (next == ClawMachineState.openingClaw)
+            switch (next)
             {
-                if (claw != null)
-                    claw.OpenClaw();
+                case ClawMachineState.off:
+                    return;
 
-                if (openingCoroutine != null)
-                    StopCoroutine(openingCoroutine);
-                openingCoroutine = StartCoroutine(FinishOpening());
+                case ClawMachineState.idle:
+                    claw.OpenClaw();
+                    return;
+
+                case ClawMachineState.running:
+                    if (OnStartRound != null)
+                        OnStartRound.Invoke();
+                    return;
+
+                case ClawMachineState.grabbing:
+                    claw.FullGrab();
+                    // Source also enables the action camera here.
+                    return;
+
+                case ClawMachineState.returning:
+                    if (settings != null && settings.dontReturn)
+                        SetMachineState(ClawMachineState.openingClaw);
+
+                    // Source additionally checks dontReturnIfEmpty through ClawHasContent().
+                    // Prize-content filtering is outside Gate 1 and remains unmapped here.
+                    return;
+
+                case ClawMachineState.waitToOpen:
+                    float distance = clawMove.GetAndResetDistanceMoved();
+                    if (OnClawReturnedToDefaultPosition != null)
+                        OnClawReturnedToDefaultPosition.Invoke(distance);
+                    return;
+
+                case ClawMachineState.openingClaw:
+                    claw.OpenClaw();
+                    if (openingCoroutine != null)
+                        StopCoroutine(openingCoroutine);
+                    openingCoroutine = StartCoroutine(FinishOpening(0.6f));
+                    // Source also disables the action camera here.
+                    return;
+
+                case ClawMachineState.overwriteReturning:
+                    curState = ClawMachineState.returning;
+                    return;
             }
         }
 
-        private IEnumerator FinishOpening()
+        private IEnumerator FinishOpening(float delay)
         {
-            // Canonical machine path uses a hard-coded 0.6 second opening completion delay.
-            yield return new WaitForSeconds(0.6f);
+            yield return new WaitForSeconds(delay);
             openingCoroutine = null;
-            curState = ClawMachineState.idle;
-            OnEndRound.Invoke();
+
+            // Source calls SetMachineState(idle), then PrizeSpawner.OnEndGrab(), then OnEndRound.
+            SetMachineState(ClawMachineState.idle);
+            if (OnEndRound != null)
+                OnEndRound.Invoke();
         }
     }
 }
