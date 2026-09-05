@@ -153,8 +153,6 @@ namespace Claw3D.Machine
                     break;
 
                 case MachineState.Grip:
-                    // The reference commands a full close and then waits timeToClose while
-                    // the three physical arm Rigidbodies fight contacts independently.
                     claw.SetOpenAmount(0f);
                     prompt = "Gripping...";
                     break;
@@ -186,10 +184,11 @@ namespace Claw3D.Machine
         {
             string mode = config == null ? "?" : config.difficultyMode.ToString();
             GUI.Box(
-                new Rect(12f, 12f, 430f, 112f),
+                new Rect(12f, 12f, 470f, 132f),
                 $"CLAW3D | {state} | {mode}\n{prompt}\n" +
                 $"Grab: {claw.ActiveGrabType}  Failed: {failedTries}  Prizes: {prizes}\n" +
-                $"Swing: {claw.HubSwingSpeed:0.00} m/s");
+                $"Swing: {claw.HubSwingSpeed:0.00} m/s\n" +
+                $"Rope: {claw.RopeRestLength:0.000} m  Particles: {claw.RopeActiveParticles}  Elements: {claw.RopeElements}");
         }
     }
 }
