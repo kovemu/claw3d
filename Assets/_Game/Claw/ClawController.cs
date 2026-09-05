@@ -39,7 +39,7 @@ namespace Claw3D.Claw
             if (config == null || trolleyBody == null) return;
 
             // Camera is at +Z looking inward. Keep screen-space controls intuitive.
-            Vector2 desired = new(-input.x, -input.y) * config.trolleySpeed;
+            Vector2 desired = new Vector2(-input.x, -input.y) * config.trolleySpeed;
 
             float acceleration = input.sqrMagnitude < 0.0001f
                 ? config.trolleyDeceleration
