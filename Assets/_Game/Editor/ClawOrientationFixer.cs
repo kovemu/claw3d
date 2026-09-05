@@ -17,7 +17,6 @@ namespace Claw3D.Editor
         static ClawOrientationFixer()
         {
             EditorSceneManager.sceneOpened += OnSceneOpened;
-            EditorSceneManager.sceneSaving += OnSceneSaving;
             EditorApplication.delayCall += ApplyToActivePrototypeScene;
         }
 
@@ -31,12 +30,8 @@ namespace Claw3D.Editor
 
         private static void OnSceneOpened(Scene scene, OpenSceneMode mode)
         {
-            if (scene.IsValid() && scene.name == PrototypeSceneName) Apply();
-        }
-
-        private static void OnSceneSaving(Scene scene, string path)
-        {
-            if (scene.name == PrototypeSceneName || path.EndsWith("/ClawPrototype.unity")) Apply();
+            if (scene.IsValid() && scene.name == PrototypeSceneName)
+                EditorApplication.delayCall += ApplyToActivePrototypeScene;
         }
 
         private static void Apply()
@@ -44,60 +39,33 @@ namespace Claw3D.Editor
             ClawPhysicsConfig config = AssetDatabase.LoadAssetAtPath<ClawPhysicsConfig>(ConfigPath);
             if (config == null) return;
 
-            // Keep only the orientation correction automatic.
-            // Gameplay tuning values such as bottomY must remain editable in the Inspector.
-            config.openAngleDegrees = -48.7f;
-            config.closedAngleDegrees = 0f;
-            EditorUtility.SetDirty(config);
-
             for (int i = 1; i <= config.fingerCount; i++)
             {
                 GameObject fingerObject = GameObject.Find($"Finger_{i}");
                 if (fingerObject == null) continue;
 
-                RebuildSegmentTransforms(fingerObject.transform, config);
+                HingeJoint hinge = fingerObject.GetComponent<HingeJoint>();
+                if (hinge != null)
+                {
+                    hinge.axis = Vector3.forward;
+                    hinge.useSpring = false;
+                    hinge.useMotor = false;
+                    hinge.useLimits = true;
+                    JointLimits limits = hinge.limits;
+                    limits.min = config.fingerClosedAngleDegrees;
+                    limits.max = config.fingerOpenAngleDegrees;
+                    limits.bounciness = 0f;
+                    limits.contactDistance = 0f;
+                    hinge.limits = limits;
+                    EditorUtility.SetDirty(hinge);
+                }
 
                 ClawFinger finger = fingerObject.GetComponent<ClawFinger>();
-                if (finger != null) finger.Configure(config);
+                if (finger != null)
+                    finger.Configure(config);
             }
 
-            // Rebuild the decorative claw skin after the physics segment transforms move.
-            ClawMechanismPresentation.ApplyToActivePrototypeScene();
             SceneView.RepaintAll();
-        }
-
-        private static void RebuildSegmentTransforms(Transform fingerRoot, ClawPhysicsConfig config)
-        {
-            float[] lengths =
-            {
-                config.fingerSegmentLengths.x,
-                config.fingerSegmentLengths.y,
-                config.fingerSegmentLengths.z
-            };
-            float[] curves =
-            {
-                config.fingerSegmentCurvesRadians.x,
-                config.fingerSegmentCurvesRadians.y,
-                config.fingerSegmentCurvesRadians.z
-            };
-
-            Vector3 cursor = Vector3.zero;
-            for (int s = 0; s < 3; s++)
-            {
-                Transform segment = fingerRoot.Find($"Segment_{s + 1}");
-                if (segment == null) continue;
-
-                // Local -Z is toward the claw center for every radially mounted finger.
-                // Positive rotation around local X bends the hanging segment inward.
-                float degrees = curves[s] * Mathf.Rad2Deg;
-                Vector3 direction = Quaternion.AngleAxis(degrees, Vector3.right) * Vector3.down;
-                Vector3 end = cursor + direction * lengths[s];
-
-                segment.localPosition = (cursor + end) * 0.5f;
-                segment.localRotation = Quaternion.FromToRotation(Vector3.up, direction);
-                cursor = end;
-                EditorUtility.SetDirty(segment);
-            }
         }
     }
 }
