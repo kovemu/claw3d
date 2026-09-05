@@ -29,13 +29,23 @@ MonoBehaviour:
   ropeActiveParticles: 3
   ropeParticlePoolCapacity: 103
   ropeParticleMass: 0.1
+  ropeInterParticleDistance: 0.021475287
+  ropeInitialRestLength: 0.027136756
+  ropeInitialElementRestLengths: {x: 0.012735528, y: 0.014401228}
   ropeStretchCompliance: 0
-  ropeBendCompliance: 0.1
-  ropeMaxBending: 0.013
-  ropeSelfCollisions: 1
-  ropeCursorMu: 0.531
-  ropeSourceMu: 0.741
+  ropeBendCompliance: 0
+  ropeMaxBending: 0.275
+  ropeSelfCollisions: 0
+  ropeCursorMu: 0
+  ropeSourceMu: 0
+  ropeCursorDirection: 1
+  ropeStartParticleIndex: 2
+  ropeEndParticleIndex: 0
   ropeAttachmentCompliance: 0
+  ropeDistanceIterations: 1
+  ropePinIterations: 1
+  ropeCollisionDynamicFriction: 1
+  ropeCollisionStaticFriction: 0
   ropeBodyVelocityCoupling: 0.55
   hubRadius: 0.05
   hubMass: 0.25
