@@ -58,8 +58,8 @@ MonoBehaviour:
   fingerMass: 0.25
   fingerIdleLinearDamping: 0
   fingerIdleAngularDamping: 0.05
-  fingerClosedAngleDegrees: 0
-  fingerOpenAngleDegrees: 45
+  fingerClosedAngleDegrees: 45
+  fingerOpenAngleDegrees: 0
   fingerLimitContactDistance: 0
   fingerAngleDeadZone: 0.6
   difficultyMode: 1
