@@ -25,19 +25,30 @@ MonoBehaviour:
   cableLength: 0.24
   loweringStepPerFixedUpdate: 0.004
   loweringDistance: 0.55
-  ropeRadialDamping: 0.98
+  ropeSubsteps: 4
+  ropeActiveParticles: 5
+  ropeParticleMass: 0.1
+  ropeStretchCompliance: 0
+  ropeBendCompliance: 0.1
+  ropeMaxBending: 0.013
+  ropeSelfCollisions: 1
+  ropeCursorMu: 0.531
+  ropeSourceMu: 0.741
+  ropeAttachmentCompliance: 0
+  ropeBodyVelocityCoupling: 0.55
   hubRadius: 0.05
-  hubMass: 0.25
+  hubMass: 1
   hubLinearDamping: 0
   hubAngularDamping: 0.05
   fingerCount: 3
   fingerMountRadius: 0.045
   fingerMountY: -0.04
-  fingerMass: 0.25
+  fingerMass: 1
   fingerIdleLinearDamping: 0
   fingerIdleAngularDamping: 0.05
   fingerClosedAngleDegrees: 0
   fingerOpenAngleDegrees: 45
+  fingerLimitContactDistance: 0.2
   fingerAngleDeadZone: 0.6
   difficultyMode: 1
   grabLinearDamping: 10
@@ -76,4 +87,4 @@ MonoBehaviour:
   fingerAngularDamping: 0.05
   solverIterations: 12
   solverVelocityIterations: 8
-  fixedTimestep: 0.016666668
+  fixedTimestep: 0.02
