@@ -1,16 +1,32 @@
+using System.Collections.Generic;
 using Claw3D.Physics;
 using UnityEngine;
 
 namespace Claw3D.Claw
 {
     /// <summary>
-    /// Small PBD rope tailored to the claw prototype. It independently recreates the
-    /// important runtime structure observed in the reference: a very low-resolution rope,
-    /// multiple substeps, distance constraints, soft bending, a kinematic top attachment,
-    /// and a dynamic bottom attachment that exchanges motion with the claw Rigidbody.
+    /// Learning implementation of the rope structure extracted from Claw Machine Sim.
+    /// It mirrors the observed runtime contract instead of the earlier fixed-particle PBD approximation:
+    /// 3 initially active particles, a 103-particle pool, head-side cursor insertion/removal,
+    /// four rope substeps, sequential distance constraints, and dynamic pin coupling back to the claw Rigidbody.
     /// </summary>
+    [DefaultExecutionOrder(100)]
     public sealed class ClawRopeConstraint : MonoBehaviour
     {
+        private sealed class StructuralElement
+        {
+            public int particle1;
+            public int particle2;
+            public float restLength;
+
+            public StructuralElement(int p1, int p2, float length)
+            {
+                particle1 = p1;
+                particle2 = p2;
+                restLength = length;
+            }
+        }
+
         [SerializeField] private ClawPhysicsConfig config;
         [SerializeField] private Rigidbody carriage;
         [SerializeField] private Rigidbody clawHead;
@@ -19,51 +35,64 @@ namespace Claw3D.Claw
 
         private Vector3[] positions;
         private Vector3[] velocities;
-        private Vector3[] stepStartPositions;
+        private Vector3[] previousPositions;
+        private bool[] activeParticles;
+        private readonly List<StructuralElement> elements = new();
+        private readonly Stack<int> freeParticles = new();
+
+        private int activeParticleCount;
+        private Vector3 previousTopAttachment;
         private bool initialized;
 
         public float InitialLength => initialLength;
         public float CurrentLength => currentLength;
         public float MaximumDropLength => initialLength + (config == null ? 0f : config.loweringDistance);
-        public int ParticleCount => positions == null ? 0 : positions.Length;
-        public bool HasSimulationPoints => initialized && positions != null && positions.Length >= 2;
+        public int ParticleCount => !initialized || elements.Count == 0 ? 0 : elements.Count + 1;
+        public int ActiveParticleCount => activeParticleCount;
+        public int ElementCount => elements.Count;
+        public bool HasSimulationPoints => initialized && elements.Count > 0;
 
         public void Configure(ClawPhysicsConfig physicsConfig, Rigidbody carriageBody, Rigidbody headBody)
         {
             config = physicsConfig;
             carriage = carriageBody;
             clawHead = headBody;
-            initialLength = Mathf.Max(0.01f, config.cableLength);
-            currentLength = initialLength;
-            InitializeParticles();
+            InitializePool();
         }
 
         public void ResetLength()
         {
-            currentLength = initialLength;
-            InitializeParticles();
+            InitializePool();
         }
 
         public bool ExtendOneStep()
         {
-            if (config == null) return true;
+            if (config == null || !EnsureReady()) return true;
+
             float target = initialLength + config.loweringDistance;
-            currentLength = Mathf.MoveTowards(currentLength, target, config.loweringStepPerFixedUpdate);
+            float next = Mathf.MoveTowards(currentLength, target, config.loweringStepPerFixedUpdate);
+            ChangeLength(next);
             return Mathf.Abs(currentLength - target) < 0.00001f;
         }
 
         public bool RetractOneStep()
         {
-            if (config == null) return true;
-            currentLength = Mathf.MoveTowards(currentLength, initialLength, config.loweringStepPerFixedUpdate);
+            if (config == null || !EnsureReady()) return true;
+
+            float next = Mathf.MoveTowards(currentLength, initialLength, config.loweringStepPerFixedUpdate);
+            ChangeLength(next);
             return Mathf.Abs(currentLength - initialLength) < 0.00001f;
         }
 
-        public Vector3 GetParticlePosition(int index)
+        public Vector3 GetParticlePosition(int orderedIndex)
         {
             if (!HasSimulationPoints) return transform.position;
-            index = Mathf.Clamp(index, 0, positions.Length - 1);
-            return positions[index];
+
+            orderedIndex = Mathf.Clamp(orderedIndex, 0, ParticleCount - 1);
+            if (orderedIndex == 0)
+                return positions[elements[0].particle1];
+
+            return positions[elements[orderedIndex - 1].particle2];
         }
 
         private void FixedUpdate()
@@ -75,13 +104,15 @@ namespace Claw3D.Claw
         private bool EnsureReady()
         {
             if (config == null || carriage == null || clawHead == null) return false;
-            int desiredCount = Mathf.Max(2, config.ropeActiveParticles);
-            if (!initialized || positions == null || positions.Length != desiredCount)
-                InitializeParticles();
+
+            int capacity = Mathf.Max(3, config.ropeParticlePoolCapacity);
+            if (!initialized || positions == null || positions.Length != capacity || elements.Count == 0)
+                InitializePool();
+
             return initialized;
         }
 
-        private void InitializeParticles()
+        private void InitializePool()
         {
             if (config == null || carriage == null || clawHead == null)
             {
@@ -89,127 +120,375 @@ namespace Claw3D.Claw
                 return;
             }
 
-            int count = Mathf.Max(2, config.ropeActiveParticles);
-            positions = new Vector3[count];
-            velocities = new Vector3[count];
-            stepStartPositions = new Vector3[count];
+            int capacity = Mathf.Max(3, config.ropeParticlePoolCapacity);
+            positions = new Vector3[capacity];
+            velocities = new Vector3[capacity];
+            previousPositions = new Vector3[capacity];
+            activeParticles = new bool[capacity];
+            elements.Clear();
+            freeParticles.Clear();
 
-            Vector3 a = carriage.worldCenterOfMass;
-            Vector3 b = clawHead.worldCenterOfMass;
-            Vector3 direction = b - a;
-            if (direction.sqrMagnitude < 0.000001f) direction = Vector3.down;
-            direction.Normalize();
+            for (int i = capacity - 1; i >= 3; --i)
+                freeParticles.Push(i);
 
-            for (int i = 0; i < count; i++)
+            activeParticles[0] = true;
+            activeParticles[1] = true;
+            activeParticles[2] = true;
+            activeParticleCount = 3;
+
+            float firstRest = Mathf.Max(0.000001f, config.ropeInitialElementRestLengths.x);
+            float secondRest = Mathf.Max(0.000001f, config.ropeInitialElementRestLengths.y);
+            initialLength = firstRest + secondRest;
+            currentLength = initialLength;
+
+            Vector3 headPoint = GetHeadAttachmentPoint();
+            Vector3 topPoint = GetTopAttachmentPoint();
+            Vector3 span = topPoint - headPoint;
+
+            if (span.sqrMagnitude < 0.0000001f)
+                span = Vector3.up * initialLength;
+
+            float ratio = firstRest / initialLength;
+            positions[0] = headPoint;
+            positions[1] = Vector3.Lerp(headPoint, topPoint, ratio);
+            positions[2] = topPoint;
+
+            Vector3 headVelocity = clawHead.GetPointVelocity(headPoint);
+            Vector3 topVelocity = carriage.linearVelocity;
+            velocities[0] = headVelocity;
+            velocities[1] = Vector3.Lerp(headVelocity, topVelocity, ratio);
+            velocities[2] = topVelocity;
+
+            elements.Add(new StructuralElement(0, 1, firstRest));
+            elements.Add(new StructuralElement(1, 2, secondRest));
+
+            previousTopAttachment = topPoint;
+            initialized = true;
+        }
+
+        private void ChangeLength(float newLength)
+        {
+            if (!EnsureReady()) return;
+
+            float maxLength = Mathf.Max(initialLength,
+                (Mathf.Max(3, config.ropeParticlePoolCapacity) - 1) * config.ropeInterParticleDistance);
+            newLength = Mathf.Clamp(newLength, initialLength, maxLength);
+
+            float lengthChange = newLength - currentLength;
+            if (Mathf.Abs(lengthChange) < 0.0000001f)
             {
-                float t = i / (float)(count - 1);
-                positions[i] = Vector3.Lerp(a, a + direction * currentLength, t);
-                velocities[i] = Vector3.zero;
+                currentLength = RecalculateRestLength();
+                return;
             }
 
-            positions[count - 1] = b;
-            initialized = true;
+            if (lengthChange > 0f)
+                GrowFromCursor(lengthChange);
+            else
+                ShrinkFromCursor(-lengthChange);
+
+            currentLength = RecalculateRestLength();
+
+            if (Mathf.Abs(newLength - initialLength) < 0.00001f)
+                CleanupCursorAtInitialLength();
+
+            currentLength = RecalculateRestLength();
+        }
+
+        private void GrowFromCursor(float lengthChange)
+        {
+            if (elements.Count == 0) return;
+
+            float interParticleDistance = Mathf.Max(0.000001f, config.ropeInterParticleDistance);
+            StructuralElement cursor = elements[0];
+
+            float lengthDelta = Mathf.Min(lengthChange,
+                Mathf.Max(0f, interParticleDistance - cursor.restLength));
+
+            if (lengthDelta > 0f)
+            {
+                cursor.restLength += lengthDelta;
+                lengthChange -= lengthDelta;
+            }
+
+            while (lengthChange > 0.0000001f &&
+                   freeParticles.Count > 0 &&
+                   cursor.restLength + lengthChange > interParticleDistance)
+            {
+                lengthDelta = Mathf.Min(lengthChange, interParticleDistance);
+                lengthChange -= lengthDelta;
+
+                int newParticle = ActivateCursorParticle(cursor, lengthDelta);
+                StructuralElement newElement = new(cursor.particle1, newParticle, lengthDelta);
+                cursor.particle1 = newParticle;
+
+                int cursorIndex = elements.IndexOf(cursor);
+                elements.Insert(Mathf.Max(0, cursorIndex), newElement);
+                cursor = newElement;
+            }
+
+            if (lengthChange > 0f)
+                cursor.restLength += lengthChange;
+        }
+
+        private void ShrinkFromCursor(float lengthChange)
+        {
+            if (elements.Count == 0) return;
+
+            StructuralElement cursor = elements[0];
+
+            while (elements.Count > 2 && lengthChange > cursor.restLength)
+            {
+                lengthChange -= cursor.restLength;
+                RemoveCursorElement();
+                cursor = elements[0];
+            }
+
+            if (lengthChange > 0f)
+            {
+                float minimum = elements.Count <= 2
+                    ? Mathf.Max(0.000001f, config.ropeInitialElementRestLengths.x)
+                    : 0f;
+                cursor.restLength = Mathf.Max(minimum, cursor.restLength - lengthChange);
+            }
+        }
+
+        private int ActivateCursorParticle(StructuralElement cursor, float lengthDelta)
+        {
+            int particle = freeParticles.Pop();
+            int source = Mathf.Clamp(config.ropeEndParticleIndex, 0, positions.Length - 1);
+
+            activeParticles[particle] = true;
+            activeParticleCount++;
+            velocities[particle] = velocities[source];
+            previousPositions[particle] = positions[source];
+
+            // Mirrors ObiRopeCursor direction=true insertion: the pooled particle is copied from
+            // the source particle, then placed on the current cursor edge using lengthDelta.
+            Vector3 a = positions[cursor.particle1];
+            Vector3 b = positions[cursor.particle2];
+            positions[particle] = a + (b - a) * lengthDelta;
+            return particle;
+        }
+
+        private void RemoveCursorElement()
+        {
+            if (elements.Count <= 2) return;
+
+            StructuralElement cursor = elements[0];
+            int removedParticle = cursor.particle2;
+            StructuralElement next = elements[1];
+
+            if (next.particle1 == removedParticle)
+                next.particle1 = cursor.particle1;
+
+            elements.RemoveAt(0);
+            DeactivateParticle(removedParticle);
+        }
+
+        private void CleanupCursorAtInitialLength()
+        {
+            while (elements.Count > 2 && elements[0].restLength <= 0.000001f)
+                RemoveCursorElement();
+
+            while (elements.Count > 2)
+                RemoveCursorElement();
+
+            if (elements.Count >= 2)
+            {
+                elements[0].restLength = Mathf.Max(0.000001f, config.ropeInitialElementRestLengths.x);
+                elements[1].restLength = Mathf.Max(0.000001f, config.ropeInitialElementRestLengths.y);
+            }
+        }
+
+        private void DeactivateParticle(int particle)
+        {
+            if (particle < 0 || particle >= activeParticles.Length || !activeParticles[particle]) return;
+            if (particle <= 2) return;
+
+            activeParticles[particle] = false;
+            positions[particle] = Vector3.zero;
+            velocities[particle] = Vector3.zero;
+            previousPositions[particle] = Vector3.zero;
+            activeParticleCount--;
+            freeParticles.Push(particle);
+        }
+
+        private float RecalculateRestLength()
+        {
+            float length = 0f;
+            for (int i = 0; i < elements.Count; ++i)
+                length += elements[i].restLength;
+            return length;
         }
 
         private void SimulateRope()
         {
             int substeps = Mathf.Max(1, config.ropeSubsteps);
             float subDt = Time.fixedDeltaTime / substeps;
-            float segmentLength = currentLength / (positions.Length - 1);
-            float particleInvMass = 1f / Mathf.Max(0.0001f, config.ropeParticleMass);
-            float bodyInvMass = clawHead.isKinematic ? 0f : 1f / Mathf.Max(0.0001f, clawHead.mass);
+            Vector3 topTarget = GetTopAttachmentPoint();
+            Vector3 topStart = previousTopAttachment;
 
-            Vector3 actualHeadStart = clawHead.worldCenterOfMass;
-            Vector3 proxyHead = actualHeadStart;
+            Vector3 headProxy = GetHeadAttachmentPoint();
+            Vector3 headProxyVelocity = clawHead.GetPointVelocity(headProxy);
+            Vector3 accumulatedHeadVelocityDelta = Vector3.zero;
 
-            for (int step = 0; step < substeps; step++)
+            for (int step = 0; step < substeps; ++step)
             {
-                Vector3 top = carriage.worldCenterOfMass;
-                positions[0] = top;
-                velocities[0] = Vector3.zero;
+                float alpha0 = step / (float)substeps;
+                float alpha1 = (step + 1) / (float)substeps;
+                Vector3 top0 = Vector3.Lerp(topStart, topTarget, alpha0);
+                Vector3 top1 = Vector3.Lerp(topStart, topTarget, alpha1);
+                Vector3 topVelocity = (top1 - top0) / Mathf.Max(0.000001f, subDt);
 
-                for (int i = 1; i < positions.Length; i++)
-                {
-                    stepStartPositions[i] = positions[i];
-                    velocities[i] += UnityEngine.Physics.gravity * subDt;
-                    positions[i] += velocities[i] * subDt;
-                }
+                headProxy += headProxyVelocity * subDt;
+                IntegrateParticles(subDt);
 
-                SolveDistanceConstraints(segmentLength, particleInvMass);
-                SolveSoftBending(subDt);
-                SolveDynamicBottomAttachment(ref proxyHead, particleInvMass, bodyInvMass);
-                SolveDistanceConstraints(segmentLength, particleInvMass);
-                positions[0] = top;
+                int distanceIterations = Mathf.Max(1, config.ropeDistanceIterations);
+                for (int i = 0; i < distanceIterations; ++i)
+                    SolveDistanceConstraintsSequential(subDt);
 
-                for (int i = 1; i < positions.Length; i++)
-                    velocities[i] = (positions[i] - stepStartPositions[i]) / Mathf.Max(0.0001f, subDt);
+                SolveTopDynamicPin(top1);
+
+                int pinIterations = Mathf.Max(1, config.ropePinIterations);
+                for (int i = 0; i < pinIterations; ++i)
+                    SolveHeadDynamicPin(
+                        ref headProxy,
+                        ref headProxyVelocity,
+                        subDt,
+                        ref accumulatedHeadVelocityDelta);
+
+                UpdateParticleVelocities(subDt);
+
+                int topParticle = GetTopParticleIndex();
+                if (topParticle >= 0)
+                    velocities[topParticle] = topVelocity;
             }
 
-            ApplyBottomAttachmentToRigidbody(actualHeadStart, proxyHead);
+            previousTopAttachment = topTarget;
+            ApplyHeadVelocityFeedback(accumulatedHeadVelocityDelta);
         }
 
-        private void SolveDistanceConstraints(float restLength, float invMass)
+        private void IntegrateParticles(float dt)
         {
-            for (int i = 0; i < positions.Length - 1; i++)
+            for (int i = 0; i < activeParticles.Length; ++i)
             {
-                Vector3 delta = positions[i + 1] - positions[i];
+                if (!activeParticles[i]) continue;
+
+                previousPositions[i] = positions[i];
+                velocities[i] += UnityEngine.Physics.gravity * dt;
+                positions[i] += velocities[i] * dt;
+            }
+        }
+
+        private void SolveDistanceConstraintsSequential(float subDt)
+        {
+            float invMass = 1f / Mathf.Max(0.000001f, config.ropeParticleMass);
+            float compliance = Mathf.Max(0f, config.ropeStretchCompliance);
+            float alpha = compliance / Mathf.Max(0.0000001f, subDt * subDt);
+
+            for (int i = 0; i < elements.Count; ++i)
+            {
+                StructuralElement element = elements[i];
+                Vector3 delta = positions[element.particle2] - positions[element.particle1];
                 float distance = delta.magnitude;
                 if (distance < 0.000001f) continue;
 
-                float wA = i == 0 ? 0f : invMass;
-                float wB = invMass;
-                float w = wA + wB;
-                if (w <= 0f) continue;
+                float totalInvMass = invMass + invMass + alpha;
+                float error = distance - element.restLength;
+                float lambda = error / totalInvMass;
+                Vector3 correction = delta / distance * lambda;
 
-                float error = distance - restLength;
-                Vector3 correction = delta / distance * (error / w);
-
-                if (wA > 0f) positions[i] += correction * wA;
-                positions[i + 1] -= correction * wB;
+                positions[element.particle1] += correction * invMass;
+                positions[element.particle2] -= correction * invMass;
             }
         }
 
-        private void SolveSoftBending(float subDt)
+        private void SolveTopDynamicPin(Vector3 target)
         {
-            if (positions.Length < 3 || config.ropeBendCompliance <= 0f) return;
+            int topParticle = GetTopParticleIndex();
+            if (topParticle < 0) return;
 
-            float dt2 = subDt * subDt;
-            float stiffness = dt2 / (dt2 + Mathf.Max(0.000001f, config.ropeBendCompliance));
-
-            for (int i = 1; i < positions.Length - 1; i++)
-            {
-                Vector3 midpoint = (positions[i - 1] + positions[i + 1]) * 0.5f;
-                positions[i] = Vector3.LerpUnclamped(positions[i], midpoint, stiffness);
-            }
+            // The source attachment is Dynamic, but MOVER is kinematic. With zero compliance
+            // this resolves as a full particle correction while still transmitting motion into the rope.
+            positions[topParticle] = target;
         }
 
-        private void SolveDynamicBottomAttachment(ref Vector3 proxyHead, float particleInvMass, float bodyInvMass)
+        private void SolveHeadDynamicPin(
+            ref Vector3 headProxy,
+            ref Vector3 headProxyVelocity,
+            float subDt,
+            ref Vector3 accumulatedVelocityDelta)
         {
-            int last = positions.Length - 1;
-            Vector3 delta = proxyHead - positions[last];
-            float totalInvMass = particleInvMass + bodyInvMass;
+            int headParticle = GetHeadParticleIndex();
+            if (headParticle < 0 || clawHead == null || clawHead.isKinematic) return;
+
+            float particleInvMass = 1f / Mathf.Max(0.000001f, config.ropeParticleMass);
+            float bodyInvMass = 1f / Mathf.Max(0.000001f, clawHead.mass);
+            float compliance = Mathf.Max(0f, config.ropeAttachmentCompliance);
+            float alpha = compliance / Mathf.Max(0.0000001f, subDt * subDt);
+            float totalInvMass = particleInvMass + bodyInvMass + alpha;
             if (totalInvMass <= 0f) return;
 
-            positions[last] += delta * (particleInvMass / totalInvMass);
-            proxyHead -= delta * (bodyInvMass / totalInvMass);
+            Vector3 delta = headProxy - positions[headParticle];
+            Vector3 particleCorrection = delta * (particleInvMass / totalInvMass);
+            Vector3 bodyCorrection = -delta * (bodyInvMass / totalInvMass);
+
+            positions[headParticle] += particleCorrection;
+            headProxy += bodyCorrection;
+
+            Vector3 velocityDelta = bodyCorrection / Mathf.Max(0.000001f, subDt);
+            headProxyVelocity += velocityDelta;
+            accumulatedVelocityDelta += velocityDelta;
         }
 
-        private void ApplyBottomAttachmentToRigidbody(Vector3 actualHeadStart, Vector3 proxyHead)
+        private void UpdateParticleVelocities(float subDt)
+        {
+            float invDt = 1f / Mathf.Max(0.000001f, subDt);
+            for (int i = 0; i < activeParticles.Length; ++i)
+            {
+                if (!activeParticles[i]) continue;
+                velocities[i] = (positions[i] - previousPositions[i]) * invDt;
+            }
+        }
+
+        private void ApplyHeadVelocityFeedback(Vector3 velocityDelta)
         {
             if (clawHead == null || clawHead.isKinematic) return;
+            if (!IsFinite(velocityDelta) || velocityDelta.sqrMagnitude < 0.0000000001f) return;
 
-            Vector3 correction = proxyHead - actualHeadStart;
-            if (correction.sqrMagnitude < 0.00000001f) return;
+            // Obi's dynamic attachment writes constraint results back to the Rigidbody as velocity changes.
+            // Do the same here: never teleport the claw head to satisfy the rope.
+            Vector3 impulse = velocityDelta * clawHead.mass;
+            clawHead.AddForceAtPosition(impulse, GetHeadAttachmentPoint(), ForceMode.Impulse);
+        }
 
-            clawHead.position += correction;
+        private int GetHeadParticleIndex()
+        {
+            return elements.Count == 0 ? -1 : elements[0].particle1;
+        }
 
-            float dt = Mathf.Max(0.0001f, Time.fixedDeltaTime);
-            Vector3 velocityCorrection = correction / dt * config.ropeBodyVelocityCoupling;
-            const float maxCorrectionSpeed = 8f;
-            if (velocityCorrection.magnitude > maxCorrectionSpeed)
-                velocityCorrection = velocityCorrection.normalized * maxCorrectionSpeed;
+        private int GetTopParticleIndex()
+        {
+            return elements.Count == 0 ? -1 : elements[elements.Count - 1].particle2;
+        }
 
-            clawHead.linearVelocity += velocityCorrection;
+        private Vector3 GetTopAttachmentPoint()
+        {
+            if (carriage == null || config == null) return transform.position;
+            return carriage.position + carriage.rotation * config.ropeTopAttachmentOffset;
+        }
+
+        private Vector3 GetHeadAttachmentPoint()
+        {
+            if (clawHead == null || config == null) return transform.position;
+            return clawHead.position + clawHead.rotation * config.ropeHeadAttachmentOffset;
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+                   !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+                   !float.IsNaN(value.z) && !float.IsInfinity(value.z);
         }
     }
 }
