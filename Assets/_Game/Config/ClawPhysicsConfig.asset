@@ -46,7 +46,8 @@ MonoBehaviour:
   ropePinIterations: 1
   ropeCollisionDynamicFriction: 1
   ropeCollisionStaticFriction: 0
-  ropeBodyVelocityCoupling: 0.55
+  ropeTopAttachmentOffset: {x: -0.0091, y: -0.10477, z: -0.0021}
+  ropeHeadAttachmentOffset: {x: 0, y: 0, z: 0}
   hubRadius: 0.05
   hubMass: 0.25
   hubLinearDamping: 0
