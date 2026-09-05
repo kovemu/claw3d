@@ -38,8 +38,11 @@ namespace Claw3D.Editor
 
             Time.fixedDeltaTime = config.fixedTimestep;
 
+            trolleyBody.mass = 1f;
             trolleyBody.isKinematic = true;
             trolleyBody.useGravity = false;
+            trolleyBody.linearDamping = 0f;
+            trolleyBody.angularDamping = 0.05f;
             trolleyBody.interpolation = RigidbodyInterpolation.Interpolate;
 
             hubBody.mass = config.hubMass;
@@ -52,8 +55,6 @@ namespace Claw3D.Editor
             hubBody.solverIterations = config.solverIterations;
             hubBody.solverVelocityIterations = config.solverVelocityIterations;
 
-            // Remove the old fixed-offset pendulum. The reference changes rope rest length,
-            // so the replacement is a unilateral variable-length rope constraint.
             foreach (ConfigurableJoint joint in hub.GetComponents<ConfigurableJoint>())
                 Object.DestroyImmediate(joint);
 
@@ -94,7 +95,7 @@ namespace Claw3D.Editor
                     limits.min = config.fingerClosedAngleDegrees;
                     limits.max = config.fingerOpenAngleDegrees;
                     limits.bounciness = 0f;
-                    limits.contactDistance = 0f;
+                    limits.contactDistance = config.fingerLimitContactDistance;
                     hinge.limits = limits;
                 }
 
@@ -105,9 +106,19 @@ namespace Claw3D.Editor
             if (claw != null)
                 claw.Configure(config, trolleyBody, hubBody, fingers, rope);
 
+            GameObject cable = GameObject.Find("Cable");
+            if (cable != null)
+            {
+                ClawCableVisual cableVisual = cable.GetComponent<ClawCableVisual>();
+                if (cableVisual != null) cableVisual.SetRope(rope);
+            }
+
             EditorSceneManager.MarkSceneDirty(scene);
             SceneView.RepaintAll();
-            Debug.Log("Claw3D: reference physics rig applied (variable rope, direct carriage step, free 0..45 hinges). Save the scene after testing.");
+            Debug.Log(
+                "Claw3D: Claw Machine Sim physics rig applied. " +
+                $"Unity {1f / config.fixedTimestep:0} Hz, rope substeps {config.ropeSubsteps}, " +
+                $"particles {config.ropeActiveParticles}, claw/finger mass {config.hubMass:0.##}/{config.fingerMass:0.##} kg.");
         }
 
         private static void OnSceneOpened(Scene scene, OpenSceneMode mode)
