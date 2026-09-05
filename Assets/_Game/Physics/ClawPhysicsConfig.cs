@@ -35,7 +35,7 @@ namespace Claw3D.Physics
         public float shellThickness = 0.04f;
 
         [Header("Carriage - Claw Machine Sim reference")]
-        [Tooltip("Reference ClawMoveModule speed. This is a position step per FixedUpdate, not metres/second.")]
+        [Tooltip("Reference ClawMoveModule position step per FixedUpdate.")]
         public float trolleyStepPerFixedUpdate = 0.007f;
         public bool returnAxisAtATime = true;
         public Vector2 xLimits = new(-0.26f, 0.26f);
@@ -43,42 +43,61 @@ namespace Claw3D.Physics
         public float railY = 0.96f;
         public Vector2 homeXZ = new(-0.30f, 0.30f);
 
-        [Header("Rope - Claw Machine Sim reference")]
-        [Tooltip("Prototype starting rope length. The commercial scene's lowering distance is reproduced separately below.")]
+        [Header("Rope length - prototype mapped")]
+        [Tooltip("Our metre-scale cabinet's starting rope length. The target asset uses its own scaled hierarchy, so this remains a geometry mapping value rather than a copied local-unit value.")]
         public float cableLength = 0.24f;
-        [Tooltip("Reference active ClawRope loweringSpeed: rest length changes by 0.004 per physics update.")]
+        [Tooltip("Current prototype reel step. Keep editable until the target ClawRope MonoBehaviour fields are fully mapped.")]
         public float loweringStepPerFixedUpdate = 0.004f;
-        [Tooltip("Reference active ClawRope loweringDistance.")]
+        [Tooltip("Current prototype reel travel. Keep editable until the target ClawRope MonoBehaviour fields are fully mapped.")]
         public float loweringDistance = 0.55f;
-        [Tooltip("Small radial velocity damping used by our massless-rope constraint when it becomes taut.")]
-        [Range(0f, 1f)] public float ropeRadialDamping = 0.98f;
 
-        [Header("Claw head")]
+        [Header("Obi-style rope solver - extracted target structure")]
+        [Tooltip("Target ObiFixedUpdater performs four substeps per Unity FixedUpdate.")]
+        public int ropeSubsteps = 4;
+        [Tooltip("Target active rope contains five simulated particles (four structural elements).")]
+        public int ropeActiveParticles = 5;
+        [Tooltip("Target active blueprint particle inverse mass is 10, therefore each rope particle mass is 0.1 kg.")]
+        public float ropeParticleMass = 0.10f;
+        public float ropeStretchCompliance = 0f;
+        public float ropeBendCompliance = 0.10f;
+        public float ropeMaxBending = 0.013f;
+        public bool ropeSelfCollisions = true;
+        [Tooltip("Target ObiRopeCursor serialized cursor coordinate.")]
+        public float ropeCursorMu = 0.531f;
+        [Tooltip("Target ObiRopeCursor serialized source coordinate.")]
+        public float ropeSourceMu = 0.741f;
+        [Tooltip("Both target ObiParticleAttachment components are dynamic with zero compliance.")]
+        public float ropeAttachmentCompliance = 0f;
+        [Tooltip("Velocity correction applied after the custom PBD rope resolves its dynamic bottom attachment.")]
+        [Range(0f, 1f)] public float ropeBodyVelocityCoupling = 0.55f;
+
+        [Header("Claw head - extracted Rigidbody")]
         public float hubRadius = 0.05f;
-        [Tooltip("Reference central claw Rigidbody mass.")]
-        public float hubMass = 0.25f;
+        [Tooltip("Active target ClawMain.002 Rigidbody mass.")]
+        public float hubMass = 1.0f;
         public float hubLinearDamping = 0f;
-        [Tooltip("Reference central claw Rigidbody angular drag/damping.")]
         public float hubAngularDamping = 0.05f;
 
-        [Header("Finger body / joint")]
+        [Header("Finger body / joint - extracted")]
         public int fingerCount = 3;
         public float fingerMountRadius = 0.045f;
         public float fingerMountY = -0.04f;
-        [Tooltip("Reference finger Rigidbody mass.")]
-        public float fingerMass = 0.25f;
+        [Tooltip("Each active target claw-finger Rigidbody mass.")]
+        public float fingerMass = 1.0f;
         public float fingerIdleLinearDamping = 0f;
         public float fingerIdleAngularDamping = 0.05f;
         [Tooltip("Reference HingeJoint limits are 0..45 degrees. The joint has no motor and no spring.")]
         public float fingerClosedAngleDegrees = 0f;
         public float fingerOpenAngleDegrees = 45f;
+        [Tooltip("Target HingeJoint limit contact distance.")]
+        public float fingerLimitContactDistance = 0.20f;
         public float fingerAngleDeadZone = 0.6f;
 
-        [Header("Claw settings - exact extracted values")]
+        [Header("Claw settings - extracted values")]
         public ClawDifficultyMode difficultyMode = ClawDifficultyMode.Realistic;
-        [Tooltip("ClawSettings.drag used by the target game grab profiles.")]
+        [Tooltip("ClawSettings.drag used by the target grab profiles.")]
         public float grabLinearDamping = 10f;
-        [Tooltip("ClawSettings.angularDrag used by the target game grab profiles.")]
+        [Tooltip("ClawSettings.angularDrag used by the target grab profiles.")]
         public float grabAngularDamping = 30f;
 
         [Header("Normal difficulty")]
@@ -99,17 +118,14 @@ namespace Claw3D.Physics
         public float realisticDyingDelayedVelocity = 7f;
         public float realisticDyingDelaySeconds = 7f;
 
-        [Header("Claw friction materials - exact extracted values")]
+        [Header("Claw friction materials - extracted values")]
         public float maxFriction = 10f;
         public float highFriction = 0.75f;
         public float iceyFriction = 0.30f;
 
-        [Header("Cycle - active scene values")]
-        [Tooltip("Reference ClawModule timeToClose.")]
+        [Header("Cycle - extracted active values")]
         public float timeToClose = 0.50f;
-        [Tooltip("Reference ClawMoveModule delayToOpen after returning home.")]
         public float delayToOpen = 0.40f;
-        [Tooltip("Reference ClawModule timeToOpen.")]
         public float timeToOpen = 1.50f;
         public float scoreSeconds = 0.90f;
 
@@ -130,9 +146,10 @@ namespace Claw3D.Physics
         public Vector3 fingerSegmentRadii = new(0.010f, 0.0075f, 0.0055f);
         public float fingerAngularDamping = 0.05f;
 
-        [Header("Solver")]
+        [Header("Unity / PhysX")]
         public int solverIterations = 12;
         public int solverVelocityIterations = 8;
-        public float fixedTimestep = 1f / 60f;
+        [Tooltip("Target project's TimeManager fixedDeltaTime is 0.02 seconds (50 Hz). Obi then substeps this four times.")]
+        public float fixedTimestep = 0.02f;
     }
 }
