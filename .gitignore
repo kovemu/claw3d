@@ -24,3 +24,7 @@ Recordings/
 
 .sysinfo
 .DS_Store
+
+# Local-only Claw Machine Sim study material. Never commit extracted third-party binaries/assets.
+Assets/ReferenceOriginal/
+ReferenceCloneProject/Assets/ReferenceOriginal/
