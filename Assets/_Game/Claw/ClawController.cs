@@ -19,6 +19,22 @@ namespace Claw3D.Claw
         public int RopeActiveParticles => rope == null ? 0 : rope.ActiveParticleCount;
         public int RopeElements => rope == null ? 0 : rope.ElementCount;
         public float RopeRestLength => rope == null ? 0f : rope.CurrentLength;
+        public float AverageFingerAngle
+        {
+            get
+            {
+                if (fingers == null || fingers.Length == 0) return 0f;
+                float sum = 0f;
+                int count = 0;
+                foreach (ClawFinger finger in fingers)
+                {
+                    if (finger == null) continue;
+                    sum += finger.CurrentAngle;
+                    count++;
+                }
+                return count == 0 ? 0f : sum / count;
+            }
+        }
 
         public void Configure(
             ClawPhysicsConfig physicsConfig,
@@ -32,6 +48,7 @@ namespace Claw3D.Claw
             hubBody = hub;
             fingers = clawFingers;
             rope = ropeConstraint != null ? ropeConstraint : GetComponent<ClawRopeConstraint>();
+            activeGrabType = ClawGrabType.None;
             SetOpenAmount(1f);
         }
 
@@ -39,8 +56,6 @@ namespace Claw3D.Claw
         {
             if (config == null || trolleyBody == null) return;
 
-            // The reference ClawMoveModule uses a direct MovePosition step of 0.007
-            // with velocityBasedMovement disabled. Keep the player's screen-space mapping.
             Vector3 p = trolleyBody.position;
             p.x = Mathf.Clamp(
                 p.x - input.x * config.trolleyStepPerFixedUpdate,
@@ -95,17 +110,19 @@ namespace Claw3D.Claw
                    Mathf.Abs(p.z - config.homeXZ.y) < 0.0001f;
         }
 
-        public ClawGrabType SelectAndApplyGrabProfile(int failedTries)
+        public ClawGrabType SelectGrabProfile(int failedTries)
         {
-            if (config == null) return ClawGrabType.Normal;
+            if (config == null)
+            {
+                activeGrabType = ClawGrabType.Normal;
+                return activeGrabType;
+            }
 
             if (config.difficultyMode == ClawDifficultyMode.Normal)
             {
-                bool strong = failedTries >= config.normalFailedTriesForStrong;
-                activeGrabType = strong ? ClawGrabType.Strong : ClawGrabType.Normal;
-                ApplyToFingers(
-                    strong ? config.normalStrongClawVelocity : config.normalClawVelocity,
-                    strong ? ClawGripMaterial.HighFriction : ClawGripMaterial.Default);
+                activeGrabType = failedTries >= config.normalFailedTriesForStrong
+                    ? ClawGrabType.Strong
+                    : ClawGrabType.Normal;
                 return activeGrabType;
             }
 
@@ -125,8 +142,23 @@ namespace Claw3D.Claw
             else
                 activeGrabType = ClawGrabType.Dying;
 
-            ApplyActiveGrabProfile(false);
             return activeGrabType;
+        }
+
+        public void ApplySelectedGrabProfile()
+        {
+            if (config == null) return;
+
+            if (config.difficultyMode == ClawDifficultyMode.Normal)
+            {
+                bool strong = activeGrabType == ClawGrabType.Strong;
+                ApplyToFingers(
+                    strong ? config.normalStrongClawVelocity : config.normalClawVelocity,
+                    strong ? ClawGripMaterial.HighFriction : ClawGripMaterial.Default);
+                return;
+            }
+
+            ApplyActiveGrabProfile(false);
         }
 
         public void ApplyDelayedDyingProfile()
