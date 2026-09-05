@@ -6,9 +6,9 @@ namespace Claw3D.Claw
 {
     /// <summary>
     /// Learning implementation of the rope structure extracted from Claw Machine Sim.
-    /// It mirrors the observed runtime contract instead of the earlier fixed-particle PBD approximation:
-    /// 3 initially active particles, a 103-particle pool, head-side cursor insertion/removal,
-    /// four rope substeps, sequential distance constraints, and dynamic pin coupling back to the claw Rigidbody.
+    /// Mirrors the observed runtime contract: three initially active particles, a pooled
+    /// particle reserve, head-side cursor insertion/removal, four substeps, sequential
+    /// distance constraints and dynamic pin feedback to the claw Rigidbody.
     /// </summary>
     [DefaultExecutionOrder(100)]
     public sealed class ClawRopeConstraint : MonoBehaviour
@@ -144,7 +144,6 @@ namespace Claw3D.Claw
             Vector3 headPoint = GetHeadAttachmentPoint();
             Vector3 topPoint = GetTopAttachmentPoint();
             Vector3 span = topPoint - headPoint;
-
             if (span.sqrMagnitude < 0.0000001f)
                 span = Vector3.up * initialLength;
 
@@ -170,7 +169,8 @@ namespace Claw3D.Claw
         {
             if (!EnsureReady()) return;
 
-            float maxLength = Mathf.Max(initialLength,
+            float maxLength = Mathf.Max(
+                initialLength,
                 (Mathf.Max(3, config.ropeParticlePoolCapacity) - 1) * config.ropeInterParticleDistance);
             newLength = Mathf.Clamp(newLength, initialLength, maxLength);
 
@@ -201,7 +201,8 @@ namespace Claw3D.Claw
             float interParticleDistance = Mathf.Max(0.000001f, config.ropeInterParticleDistance);
             StructuralElement cursor = elements[0];
 
-            float lengthDelta = Mathf.Min(lengthChange,
+            float lengthDelta = Mathf.Min(
+                lengthChange,
                 Mathf.Max(0f, interParticleDistance - cursor.restLength));
 
             if (lengthDelta > 0f)
@@ -218,7 +219,7 @@ namespace Claw3D.Claw
                 lengthChange -= lengthDelta;
 
                 int newParticle = ActivateCursorParticle(cursor, lengthDelta);
-                StructuralElement newElement = new(cursor.particle1, newParticle, lengthDelta);
+                StructuralElement newElement = new StructuralElement(cursor.particle1, newParticle, lengthDelta);
                 cursor.particle1 = newParticle;
 
                 int cursorIndex = elements.IndexOf(cursor);
@@ -262,8 +263,6 @@ namespace Claw3D.Claw
             velocities[particle] = velocities[source];
             previousPositions[particle] = positions[source];
 
-            // Mirrors ObiRopeCursor direction=true insertion: the pooled particle is copied from
-            // the source particle, then placed on the current cursor edge using lengthDelta.
             Vector3 a = positions[cursor.particle1];
             Vector3 b = positions[cursor.particle2];
             positions[particle] = a + (b - a) * lengthDelta;
@@ -329,8 +328,8 @@ namespace Claw3D.Claw
             Vector3 topStart = previousTopAttachment;
 
             Vector3 headProxy = GetHeadAttachmentPoint();
-            Vector3 headProxyVelocity = clawHead.GetPointVelocity(headProxy);
-            Vector3 accumulatedHeadVelocityDelta = Vector3.zero;
+            Vector3 headVelocity = clawHead.GetPointVelocity(headProxy);
+            Vector3 accumulatedHeadPositionCorrection = Vector3.zero;
 
             for (int step = 0; step < substeps; ++step)
             {
@@ -340,7 +339,11 @@ namespace Claw3D.Claw
                 Vector3 top1 = Vector3.Lerp(topStart, topTarget, alpha1);
                 Vector3 topVelocity = (top1 - top0) / Mathf.Max(0.000001f, subDt);
 
-                headProxy += headProxyVelocity * subDt;
+                // Predict the attached Rigidbody using the velocity PhysX currently owns. Do not
+                // recursively feed the rope correction back into this velocity inside each substep:
+                // Obi writes the accumulated dynamic-pin result back after the solver step.
+                headProxy += headVelocity * subDt;
+
                 IntegrateParticles(subDt);
 
                 int distanceIterations = Mathf.Max(1, config.ropeDistanceIterations);
@@ -353,9 +356,8 @@ namespace Claw3D.Claw
                 for (int i = 0; i < pinIterations; ++i)
                     SolveHeadDynamicPin(
                         ref headProxy,
-                        ref headProxyVelocity,
                         subDt,
-                        ref accumulatedHeadVelocityDelta);
+                        ref accumulatedHeadPositionCorrection);
 
                 UpdateParticleVelocities(subDt);
 
@@ -365,7 +367,14 @@ namespace Claw3D.Claw
             }
 
             previousTopAttachment = topTarget;
-            ApplyHeadVelocityFeedback(accumulatedHeadVelocityDelta);
+
+            // Previous implementation converted every substep correction using subDt and then
+            // summed them. With four substeps this over-amplified the Rigidbody feedback by roughly
+            // four times and produced the visible high-frequency trembling. Convert the accumulated
+            // position correction once over the whole FixedUpdate instead.
+            Vector3 velocityDelta = accumulatedHeadPositionCorrection /
+                                    Mathf.Max(0.000001f, Time.fixedDeltaTime);
+            ApplyHeadVelocityFeedback(velocityDelta);
         }
 
         private void IntegrateParticles(float dt)
@@ -408,16 +417,15 @@ namespace Claw3D.Claw
             int topParticle = GetTopParticleIndex();
             if (topParticle < 0) return;
 
-            // The source attachment is Dynamic, but MOVER is kinematic. With zero compliance
-            // this resolves as a full particle correction while still transmitting motion into the rope.
+            // Source attachment is Dynamic, but MOVER is kinematic. Zero compliance therefore
+            // resolves to the target position while carriage motion is transmitted into the rope.
             positions[topParticle] = target;
         }
 
         private void SolveHeadDynamicPin(
             ref Vector3 headProxy,
-            ref Vector3 headProxyVelocity,
             float subDt,
-            ref Vector3 accumulatedVelocityDelta)
+            ref Vector3 accumulatedPositionCorrection)
         {
             int headParticle = GetHeadParticleIndex();
             if (headParticle < 0 || clawHead == null || clawHead.isKinematic) return;
@@ -435,10 +443,7 @@ namespace Claw3D.Claw
 
             positions[headParticle] += particleCorrection;
             headProxy += bodyCorrection;
-
-            Vector3 velocityDelta = bodyCorrection / Mathf.Max(0.000001f, subDt);
-            headProxyVelocity += velocityDelta;
-            accumulatedVelocityDelta += velocityDelta;
+            accumulatedPositionCorrection += bodyCorrection;
         }
 
         private void UpdateParticleVelocities(float subDt)
@@ -454,10 +459,14 @@ namespace Claw3D.Claw
         private void ApplyHeadVelocityFeedback(Vector3 velocityDelta)
         {
             if (clawHead == null || clawHead.isKinematic) return;
-            if (!IsFinite(velocityDelta) || velocityDelta.sqrMagnitude < 0.0000000001f) return;
+            if (!IsFinite(velocityDelta) || velocityDelta.sqrMagnitude < 0.00000001f) return;
 
-            // Obi's dynamic attachment writes constraint results back to the Rigidbody as velocity changes.
-            // Do the same here: never teleport the claw head to satisfy the rope.
+            // Keep a generous safety ceiling for numerical accidents during editor hot-reload or
+            // scene migration. Normal rope impulses should remain far below this value.
+            const float maxVelocityCorrection = 12f;
+            if (velocityDelta.magnitude > maxVelocityCorrection)
+                velocityDelta = velocityDelta.normalized * maxVelocityCorrection;
+
             Vector3 impulse = velocityDelta * clawHead.mass;
             clawHead.AddForceAtPosition(impulse, GetHeadAttachmentPoint(), ForceMode.Impulse);
         }
