@@ -24,6 +24,15 @@ namespace Claw3D.Editor
         private const float ReferenceHeadColliderRadius = 0.11f;
         private const float ReferenceHeadColliderHeight = 0.513159454f;
 
+        // Active source arm pivots expressed relative to the active ClawMain.002 transform position.
+        // Sorted to match the prototype's Finger_1 (front), Finger_2 (+120), Finger_3 (-120) order.
+        private static readonly Vector3[] ReferenceFingerPivotOffsets =
+        {
+            new(-0.0002702177f, -0.0906925201f, 0.0436868667f),
+            new(0.0378040373f, -0.0906924009f, -0.0215678215f),
+            new(-0.0377401411f, -0.0906636119f, -0.0219225884f)
+        };
+
         private static readonly Vector3[] ReferenceFingerCapsulePositions =
         {
             new(-0.0741f, -0.0054f, 0f),
@@ -100,9 +109,11 @@ namespace Claw3D.Editor
                 Object.DestroyImmediate(joint);
 
             ApplyReferenceHeadCollider(hub);
+            AlignReferenceFingerPivots(hub.transform, fingers);
 
-            foreach (ClawFinger finger in fingers)
+            for (int fingerIndex = 0; fingerIndex < fingers.Length; ++fingerIndex)
             {
+                ClawFinger finger = fingers[fingerIndex];
                 Rigidbody body = finger.GetComponent<Rigidbody>();
                 if (body != null)
                 {
@@ -129,6 +140,8 @@ namespace Claw3D.Editor
                     // Source ClawMain.004 uses local +Z as its hinge axis. The temporary
                     // prototype finger frame maps source +Z to prototype -X.
                     hinge.axis = -Vector3.right;
+                    hinge.anchor = Vector3.zero;
+                    hinge.autoConfigureConnectedAnchor = true;
 
                     JointLimits limits = hinge.limits;
                     limits.min = config.fingerClosedAngleDegrees;
@@ -187,10 +200,27 @@ namespace Claw3D.Editor
             EditorSceneManager.MarkSceneDirty(scene);
             SceneView.RepaintAll();
             Debug.Log(
-                "Claw3D: pooled reference rope + extracted collider rig applied. " +
+                "Claw3D: pooled reference rope + extracted collider/pivot rig applied. " +
                 $"Unity {1f / config.fixedTimestep:0} Hz, rope {config.ropeSubsteps} substeps, " +
                 $"initial/pool particles {config.ropeActiveParticles}/{config.ropeParticlePoolCapacity}, " +
                 $"head collider Capsule, finger colliders 4 Capsule + 2 Box each.");
+        }
+
+        private static void AlignReferenceFingerPivots(Transform hub, ClawFinger[] fingers)
+        {
+            int count = Mathf.Min(fingers.Length, ReferenceFingerPivotOffsets.Length);
+            for (int i = 0; i < count; ++i)
+            {
+                Vector3 offset = ReferenceFingerPivotOffsets[i];
+                fingers[i].transform.position = hub.position + hub.rotation * offset;
+
+                Vector3 radial = new Vector3(offset.x, 0f, offset.z);
+                if (radial.sqrMagnitude > 0.000001f)
+                {
+                    radial = hub.rotation * radial.normalized;
+                    fingers[i].transform.rotation = Quaternion.LookRotation(radial, hub.up);
+                }
+            }
         }
 
         private static void ApplyReferenceHeadCollider(GameObject hub)
