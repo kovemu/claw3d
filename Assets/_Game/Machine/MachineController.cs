@@ -16,9 +16,12 @@ namespace Claw3D.Machine
 
         private readonly HashSet<ToyPhysics> scoredToys = new();
         private float stateTimer;
-        private float fingerOpen = 1f;
+        private float grabProfileTimer;
+        private bool dyingProfileChanged;
+        private bool releaseStarted;
         private int prizes;
         private int prizesAtRoundStart;
+        private int failedTries;
         private string prompt = "Space: start";
 
         public void Configure(ClawInput clawInput, ClawController clawController, ClawPhysicsConfig physicsConfig)
@@ -31,8 +34,7 @@ namespace Claw3D.Machine
 
         public void ReportPrize(ToyPhysics toy)
         {
-            if (toy == null) return;
-            if (!scoredToys.Add(toy)) return;
+            if (toy == null || !scoredToys.Add(toy)) return;
             prizes++;
             prompt = "PRIZE!";
         }
@@ -40,7 +42,20 @@ namespace Claw3D.Machine
         private void Update()
         {
             if (input == null || claw == null || config == null) return;
+
             stateTimer += Time.deltaTime;
+
+            if (state != MachineState.Idle && state != MachineState.Aim)
+            {
+                grabProfileTimer += Time.deltaTime;
+                if (!dyingProfileChanged &&
+                    claw.ActiveGrabType == ClawGrabType.Dying &&
+                    grabProfileTimer >= config.realisticDyingDelaySeconds)
+                {
+                    claw.ApplyDelayedDyingProfile();
+                    dyingProfileChanged = true;
+                }
+            }
 
             if (input.DropPressed)
             {
@@ -51,8 +66,6 @@ namespace Claw3D.Machine
                 }
                 else if (state == MachineState.Aim)
                 {
-                    // Do not zero pendulum velocity here. The carriage starts braking,
-                    // but the hanging claw keeps whatever swing the player created.
                     EnterState(MachineState.Drop);
                 }
             }
@@ -60,19 +73,29 @@ namespace Claw3D.Machine
             switch (state)
             {
                 case MachineState.Grip:
-                    fingerOpen = 1f - Mathf.Clamp01(stateTimer / config.gripSeconds);
-                    claw.SetOpenAmount(fingerOpen);
-                    if (stateTimer >= config.gripSeconds) EnterState(MachineState.Lift);
+                    if (stateTimer >= config.timeToClose)
+                        EnterState(MachineState.Lift);
                     break;
 
                 case MachineState.Release:
-                    fingerOpen = Mathf.Clamp01(stateTimer / config.releaseSeconds);
-                    claw.SetOpenAmount(fingerOpen);
-                    if (stateTimer >= config.releaseSeconds) EnterState(MachineState.Score);
+                    if (!releaseStarted && stateTimer >= config.delayToOpen)
+                    {
+                        releaseStarted = true;
+                        claw.SetOpenAmount(1f);
+                        prompt = "Opening...";
+                    }
+
+                    if (releaseStarted && stateTimer >= config.delayToOpen + config.timeToOpen)
+                        EnterState(MachineState.Score);
                     break;
 
                 case MachineState.Score:
-                    if (stateTimer >= config.scoreSeconds) EnterState(MachineState.Idle);
+                    if (stateTimer >= config.scoreSeconds)
+                    {
+                        bool success = prizes > prizesAtRoundStart;
+                        failedTries = success ? 0 : failedTries + 1;
+                        EnterState(MachineState.Idle);
+                    }
                     break;
             }
         }
@@ -88,36 +111,18 @@ namespace Claw3D.Machine
                     break;
 
                 case MachineState.Drop:
-                    claw.BrakeHorizontal();
-                    if (claw.MoveVerticalToward(config.bottomY, config.dropSpeed))
+                    if (claw.LowerRopeOneStep())
                         EnterState(MachineState.Grip);
                     break;
 
-                case MachineState.Grip:
-                    claw.BrakeHorizontal();
-                    break;
-
                 case MachineState.Lift:
-                    claw.BrakeHorizontal();
-                    if (claw.MoveVerticalToward(config.topY, config.liftSpeed))
+                    if (claw.RaiseRopeOneStep())
                         EnterState(MachineState.Return);
                     break;
 
                 case MachineState.Return:
-                    if (stateTimer < config.joltDuration && config.joltAmplitude > 0f)
-                    {
-                        claw.ApplyTopStopJolt(stateTimer);
-                    }
-                    else
-                    {
-                        claw.MoveVerticalToward(config.topY, config.liftSpeed);
-                        if (claw.ReturnHome()) EnterState(MachineState.Release);
-                    }
-                    break;
-
-                case MachineState.Release:
-                case MachineState.Score:
-                    claw.BrakeHorizontal();
+                    if (claw.ReturnHome())
+                        EnterState(MachineState.Release);
                     break;
             }
         }
@@ -130,42 +135,46 @@ namespace Claw3D.Machine
             switch (state)
             {
                 case MachineState.Idle:
-                    fingerOpen = 1f;
-                    claw.StopAllMotion();
-                    claw.SetStrengthScale(1f);
                     claw.SetOpenAmount(1f);
                     prompt = "Space: start";
                     break;
+
                 case MachineState.Aim:
-                    fingerOpen = 1f;
-                    claw.SetStrengthScale(1f);
                     claw.SetOpenAmount(1f);
                     prompt = "WASD / arrows: aim · Space: drop";
                     break;
+
                 case MachineState.Drop:
-                    claw.SetStrengthScale(1f);
+                    grabProfileTimer = 0f;
+                    dyingProfileChanged = false;
+                    claw.SelectAndApplyGrabProfile(failedTries);
                     claw.SetOpenAmount(1f);
                     prompt = "Dropping...";
                     break;
+
                 case MachineState.Grip:
-                    claw.SetStrengthScale(1f);
+                    // The reference commands a full close and then waits timeToClose while
+                    // the three physical arm Rigidbodies fight contacts independently.
+                    claw.SetOpenAmount(0f);
                     prompt = "Gripping...";
                     break;
+
                 case MachineState.Lift:
-                    fingerOpen = 0f;
                     claw.SetOpenAmount(0f);
-                    claw.SetStrengthScale(config.carryStrengthFactor);
                     prompt = "Lifting...";
                     break;
+
                 case MachineState.Return:
                     claw.SetOpenAmount(0f);
-                    claw.SetStrengthScale(config.carryStrengthFactor);
                     prompt = "Returning...";
                     break;
+
                 case MachineState.Release:
-                    claw.SetStrengthScale(1f);
-                    prompt = "Releasing...";
+                    releaseStarted = false;
+                    claw.SetOpenAmount(0f);
+                    prompt = "Waiting to open...";
                     break;
+
                 case MachineState.Score:
                     claw.SetOpenAmount(1f);
                     prompt = prizes > prizesAtRoundStart ? "PRIZE! Nice grab." : "Miss. Try again.";
@@ -175,9 +184,12 @@ namespace Claw3D.Machine
 
         private void OnGUI()
         {
+            string mode = config == null ? "?" : config.difficultyMode.ToString();
             GUI.Box(
-                new Rect(12f, 12f, 390f, 96f),
-                $"CLAW3D  |  {state}\n{prompt}\nPrizes: {prizes}   Swing: {claw.HubSwingSpeed:0.00} m/s");
+                new Rect(12f, 12f, 430f, 112f),
+                $"CLAW3D | {state} | {mode}\n{prompt}\n" +
+                $"Grab: {claw.ActiveGrabType}  Failed: {failedTries}  Prizes: {prizes}\n" +
+                $"Swing: {claw.HubSwingSpeed:0.00} m/s");
         }
     }
 }
