@@ -20,23 +20,40 @@ The repository ignores:
 
 Keep extracted/reference-only third-party material there. Do not commit it.
 
-For the Obi gate, the clean-room `ClawRope.cs` is compiled only when the scripting define symbol below is present:
+For the Obi gate, place your own local compatible/reference Obi assembly at:
+
+`Assets/ReferenceOriginal/Plugins/Obi/Obi.dll`
+
+Then use the Unity menu:
+
+`ReferenceClone -> Enable Local Obi`
+
+The menu adds the scripting define symbol:
 
 `CLAW_REFERENCE_OBI`
 
-Before enabling that symbol, a compatible local Obi assembly/package must already be available in the Unity project. The supplied/extracted Obi binary is reference material and is intentionally not stored in GitHub.
+`ClawRope.cs` is compiled only when that symbol is enabled. The Obi binary itself is intentionally not stored in GitHub.
 
 ## Current canonical layer
 
-Implemented from the DLL/source map without using the failed Unity 6 prototype architecture:
+Implemented from the supplied DLL metadata/IL without using the failed Unity 6 prototype architecture:
 
 - `Claw.Module`
 - `Claw.ClawSettings`
 - global `ClawArm`
+- `Claw.ClawReferences`
 - `Claw.ClawModule`
 - `Claw.ClawMoveModule`
 - `Claw.ClawRope` (only with `CLAW_REFERENCE_OBI`)
-- `Claw.ClawMachine` state shell
+- `Claw.ClawMachine`
+- `ClawMachineSettings`
+
+The named methods were corrected against the actual Mono IL for:
+
+- `ClawModule.OpenClaw / CloseClaw / FullGrab / PhysicsUpdate / SetClawSettings`
+- `ClawRope` lower/raise virtual slots
+- `ClawMoveModule.Initialize / MoveClaw / UpdateReturning`
+- `ClawMachine.CalledFixedUpdate / SetMachineState`
 
 Temporary non-canonical test code lives under `Assets/Scripts/Debug` and must not be treated as source behavior.
 
