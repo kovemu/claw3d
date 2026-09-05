@@ -44,13 +44,11 @@ namespace Claw3D.Claw
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
-            // The target game uses the hinge only as a physical 0..45 degree stop.
-            // There is no HingeJoint spring or motor; the Rigidbody itself is driven.
             JointLimits limits = hinge.limits;
             limits.min = config.fingerClosedAngleDegrees;
             limits.max = config.fingerOpenAngleDegrees;
             limits.bounciness = 0f;
-            limits.contactDistance = 0f;
+            limits.contactDistance = config.fingerLimitContactDistance;
             hinge.limits = limits;
             hinge.useLimits = true;
             hinge.useSpring = false;
@@ -58,7 +56,11 @@ namespace Claw3D.Claw
             hinge.enableCollision = false;
             hinge.enablePreprocessing = true;
 
-            ApplyGrabSettings(config.realisticNormalVelocity, config.grabLinearDamping, config.grabAngularDamping, ClawGripMaterial.MaxFriction);
+            ApplyGrabSettings(
+                config.realisticNormalVelocity,
+                config.grabLinearDamping,
+                config.grabAngularDamping,
+                ClawGripMaterial.MaxFriction);
             SetOpenAmount(1f);
         }
 
@@ -93,15 +95,13 @@ namespace Claw3D.Claw
 
             if (Mathf.Abs(error) <= config.fingerAngleDeadZone)
             {
-                // Remove only velocity around the hinge axis so contact impulses are free
-                // to affect the rest of the physical assembly.
                 float axial = Vector3.Dot(body.angularVelocity, axisWorld);
                 body.angularVelocity -= axisWorld * axial;
                 return;
             }
 
-            // This mirrors the important behavior of the reference: the finger Rigidbody
-            // receives an angular velocity command while the HingeJoint supplies only limits.
+            // The reference drives each free hinge arm through Rigidbody angular velocity.
+            // Contacts are therefore able to stop one finger while the others keep moving.
             body.angularVelocity = axisWorld * (Mathf.Sign(error) * clawVelocity);
         }
 
