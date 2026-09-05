@@ -51,6 +51,8 @@ namespace Claw3D.Machine
                 }
                 else if (state == MachineState.Aim)
                 {
+                    // Do not zero pendulum velocity here. The carriage starts braking,
+                    // but the hanging claw keeps whatever swing the player created.
                     EnterState(MachineState.Drop);
                 }
             }
@@ -86,11 +88,17 @@ namespace Claw3D.Machine
                     break;
 
                 case MachineState.Drop:
+                    claw.BrakeHorizontal();
                     if (claw.MoveVerticalToward(config.bottomY, config.dropSpeed))
                         EnterState(MachineState.Grip);
                     break;
 
+                case MachineState.Grip:
+                    claw.BrakeHorizontal();
+                    break;
+
                 case MachineState.Lift:
+                    claw.BrakeHorizontal();
                     if (claw.MoveVerticalToward(config.topY, config.liftSpeed))
                         EnterState(MachineState.Return);
                     break;
@@ -106,6 +114,11 @@ namespace Claw3D.Machine
                         if (claw.ReturnHome()) EnterState(MachineState.Release);
                     }
                     break;
+
+                case MachineState.Release:
+                case MachineState.Score:
+                    claw.BrakeHorizontal();
+                    break;
             }
         }
 
@@ -118,6 +131,7 @@ namespace Claw3D.Machine
             {
                 case MachineState.Idle:
                     fingerOpen = 1f;
+                    claw.StopAllMotion();
                     claw.SetStrengthScale(1f);
                     claw.SetOpenAmount(1f);
                     prompt = "Space: start";
@@ -161,7 +175,9 @@ namespace Claw3D.Machine
 
         private void OnGUI()
         {
-            GUI.Box(new Rect(12f, 12f, 370f, 78f), $"CLAW3D  |  {state}\n{prompt}\nPrizes: {prizes}");
+            GUI.Box(
+                new Rect(12f, 12f, 390f, 96f),
+                $"CLAW3D  |  {state}\n{prompt}\nPrizes: {prizes}   Swing: {claw.HubSwingSpeed:0.00} m/s");
         }
     }
 }
